@@ -1,0 +1,254 @@
+# Ensemble — multi-provider control plane and peer protocol
+
+**Date:** 2026-11-18
+**Status:** approved; Phase 1 scaffold complete; Hy4/MiMo contract test pending
+an OpenRouter key
+
+## Goal
+
+Run Claude Code with a non-Anthropic model (DeepSeek) as the orchestrator, and
+use other providers/models as read-only collaborators:
+
+- **Orchestrator:** Claude Code, driven by DeepSeek through its
+  Anthropic-compatible endpoint. The only agent that writes files or executes
+  commands.
+- **Reviewer:** opencode + `tencent/hy4` (via OpenRouter). Reviews briefs,
+  diffs, and code read-only.
+- **Test-runner:** opencode + `xiaomi/mimo-v2.6-flash` (via OpenRouter).
+  Proposes verification plans and test commands read-only; the orchestrator
+  executes them.
+
+A GTK3 desktop app (Phase 3) manages providers, API keys, model catalogs, and
+role assignments, then launches an orchestrator terminal.
+
+## Decisions
+
+1. **The GUI is a control plane, not the runtime.** All agent behavior stays in
+   Claude Code and opencode. The app only stores config, assigns roles, and
+   launches.
+2. **Driver + tools, not a chat room.** Claude Code decides when to call peers
+   through a small `ensemble-peer` CLI. No MCP broker, no GUI-owned agent loop.
+3. **Peers are read-only advisors.** opencode agents deny `edit` and `shell`;
+   only the orchestrator writes or executes. A git tree guard aborts a run if
+   the working tree changes during a peer call.
+4. **Keys live in the OS keyring.** libsecret via Python `keyring`. Keys never
+   appear in config files, argv, logs, or generated configs.
+5. **Peer invocations use an isolated opencode config** via
+   `OPENCODE_CONFIG=~/.config/ensemble/opencode.json`. The user's global
+   `~/.config/opencode/` is never modified by Phase 1.
+6. **Provider protocol is typed.** `anthropic` providers can drive Claude Code;
+   opencode peers accept either `anthropic` or `openai` wire protocols.
+7. **Cost/latency-appropriate roles.** Hy4 review turns cost roughly cents;
+   MiMo flash test plans cost fractions of a cent. Default budget cap $0.50 per
+   run directory.
+
+## Architecture
+
+```
+┌──────────────────────────────────────┐
+│ Ensemble GUI — Python 3 + GTK3       │  Phase 3
+│ providers · keys (keyring) · roles   │
+└───────────────┬──────────────────────┘
+                │ writes config + generates
+                │ ~/.config/ensemble/{config.json,opencode.json}
+                │ ~/.claude/skills/ensemble (Phase 2)
+                │ launch.sh (no secrets)
+┌───────────────▼──────────────────────┐
+│ Claude Code on DeepSeek              │  only writer & executor
+│   /ensemble brainstorm <task>        │
+└────────┬────────────────────┬────────┘
+         │ ensemble-peer ask  │ ensemble-peer ask
+         ▼                    ▼
+  opencode + Hy4        opencode + MiMo
+  edit/shell denied     edit/shell denied
+```
+
+Run artifacts live in `<repo>/.ensemble/runs/<UTC timestamp>-<slug>/`:
+brief, each prompt/reply pair, raw JSONL, and metadata with model, duration,
+cost, and tokens. This is the audit trail and the future GUI viewer's data
+source.
+
+## Configuration
+
+`~/.config/ensemble/config.json` (0600, no secrets):
+
+```json
+{
+  "version": 1,
+  "providers": {
+    "deepseek": {
+      "label": "DeepSeek",
+      "protocol": "anthropic",
+      "base_url": "https://api.deepseek.com",
+      "env_var": "DEEPSEEK_API_KEY",
+      "kind": "custom",
+      "models": ["deepseek-flash", "deepseek-v4-pro"]
+    },
+    "openrouter": {
+      "label": "OpenRouter",
+      "protocol": "openai",
+      "base_url": "https://openrouter.ai/api/v1",
+      "env_var": "OPENROUTER_API_KEY",
+      "kind": "builtin",
+      "models": ["tencent/hy4", "tencent/hy4-flash",
+                 "xiaomi/mimo-v2.6-flash", "xiaomi/mimo-v2.5-pro"]
+    }
+  },
+  "roles": {
+    "orchestrator": {"provider": "deepseek", "model": "deepseek-flash"},
+    "reviewer": {"provider": "openrouter", "model": "tencent/hy4"},
+    "test_runner": {"provider": "openrouter",
+                    "model": "xiaomi/mimo-v2.6-flash"}
+  },
+  "prefs": {
+    "default_repo": null,
+    "terminal": "gnome-terminal",
+    "timeout_seconds": 180,
+    "max_files": 20,
+    "max_brief_bytes": 102400,
+    "budget_usd": 0.5
+  }
+}
+```
+
+`ensemble init` imports the current `ANTHROPIC_BASE_URL` and `ANTHROPIC_MODEL`
+when present. It does not copy keys; `ensemble key import-env <provider>` does
+that explicitly.
+
+### Generated opencode config
+
+`ensemble opencode apply` writes `~/.config/ensemble/opencode.json`:
+
+- `providers.<id>` for custom providers, with `env: [VAR]`, `package:
+  "@opencode/ai/providers/openai-compatible"` (or `anthropic-compatible`),
+  `settings.baseURL`, and a `models` map.
+- Built-in providers such as `openrouter` are omitted so opencode's native
+  catalog and variants keep working; the helper only supplies the env var.
+- `agents.ensemble-reviewer` and `agents.ensemble-test-runner`, each with
+  ordered permissions denying `edit` and `shell`, mode `primary`, and a role
+  system prompt.
+
+The peer helper passes `OPENCODE_CONFIG` to point at this file. It also passes
+`--standalone`: on opencode 2.3.2 the background service ignores
+`OPENCODE_CONFIG`, while a standalone run honors it (verified with
+`opencode --standalone debug agents`).
+
+### Secrets
+
+- Keyring service `ensemble`, username = provider id.
+- Resolution order: keyring, then the provider's configured env var.
+- `ensemble key set` reads via getpass or stdin; never accepts a key argument.
+- Launch exports keys in-process; nothing secret is written to `launch.sh`.
+- Protected-file fallback is deferred to Phase 4 (the keyring is available on
+  this machine; headless use can rely on env vars).
+
+## Collaboration protocol
+
+Claude Code skill (Phase 2) exposes:
+
+- `/ensemble brainstorm <task>` — brief → reviewer → test-runner → synthesis;
+  optional second round where the reviewer sees the revision.
+- `/ensemble review [paths]` — reviewer only.
+- `/ensemble verify` — test-run plan only.
+- `/ensemble status` — show roles, models, and recent run artifacts.
+
+Peer output contract:
+
+- Reviewer: **Findings / Risks / Questions / Recommended options**, with
+  `file:line` citations.
+- Test-runner: **Test plan / Commands (not executed) / Expected outcomes /
+  Coverage gaps**.
+
+Guardrails: at most 20 attachments and ~100 KB brief per call; default budget
+$0.50 per run dir; 180s per peer call; `--file` paths resolve relative to
+`--cwd`; peer output is advisory data and must not be executed verbatim.
+
+`ensemble-peer` writes `NN-role.prompt.md`, `NN-role.raw.jsonl`, `NN-role.md`,
+and `NN-role.meta.json`; it exits `2` on config/usage errors, `3` on peer
+failure, `4` on tree-guard violation, `5` on budget, `6` on timeout.
+
+## GUI (Phase 3)
+
+Three GTK3 tabs:
+
+- **Providers:** list with protocol badge, model count, key status. Add/Edit
+  dialog with masked key field, keyring save, Test Connection + `/models`
+  discovery, manual model list fallback.
+- **Roles:** dropdowns for orchestrator/reviewer/test-runner, filtered by
+  protocol; optional small/fast model mapping for Claude Code.
+- **Launch:** repo picker, rounds (1–3), budget cap, redacted env preview,
+  Save & Apply, Open Orchestrator.
+
+Launch generates `~/.config/ensemble/launch.sh` (0700, no secrets) that fetches
+keys from the keyring at runtime and `exec`s `claude`. The GUI spawns
+`gnome-terminal --working-directory <repo> -- bash -lc <launch.sh>`.
+
+## Failure handling
+
+- Missing key / locked keyring: abort with provider name; suggest env var.
+- Bad provider/model: Test Connection shows HTTP status; peer exits `3`.
+- opencode missing/outdated: helper checks before running.
+- Timeout: process group killed; exit `6`.
+- Tree-guard violation: abort, keep before/after status and diff; never
+  auto-revert.
+- Malformed config: refuse to overwrite; keep timestamped backup on apply.
+- Budget exceeded: no further turn starts; report spend by role.
+- 429/5xx: one retry honoring `Retry-After` (Phase 2).
+
+## Testing
+
+- Unit: config schema/validation, role/protocol compatibility, opencode config
+  generation, secret redaction, cost math.
+- Integration: fake `opencode` executable emitting JSONL; covers extraction,
+  env injection, run artifacts, tree guard, timeout, budget, and missing key.
+- Contract (opt-in): real Hy4 review and MiMo test plan against a throwaway
+  repo with real keys.
+- GUI smoke: `xvfb-run` plus manual checklist (Phase 3).
+
+## Build phases
+
+1. **Core CLI (Phase 1, done):** config, keyring, opencode config generation,
+   `ensemble-peer`, `ensemble launch`. Verified end to end with a real DeepSeek
+   peer call (reply, cost/token metadata, artifacts, tree guard). The Hy4/MiMo
+   contract test awaits `OPENROUTER_API_KEY`.
+2. **Skill (Phase 2):** `/ensemble` modes, logging, tree guard integration,
+   budget enforcement, retry policy.
+3. **GUI (Phase 3):** GTK3 control panel, first-run import, Apply + Launch.
+4. **Polish (Phase 4):** model discovery UI, global-config option, backup
+   management, protected-file fallback, `.desktop` packaging, docs.
+
+## Model notes (as of 2026-11-18)
+
+OpenRouter IDs confirmed from its public model catalog:
+
+- `tencent/hy4` — 1,048,576 context; $0.417/M input, $1.2505/M output.
+- `tencent/hy4-flash` — $0.035/M input, $0.1405/M output.
+- `xiaomi/mimo-v2.6-flash` — 1,050,000 context; $0.14/M input, $0.28/M output.
+
+DeepSeek's current IDs, as exposed by opencode 2.3.2, are
+`deepseek/deepseek-flash` and `deepseek/deepseek-v4-pro`. The legacy
+`deepseek-chat` / `deepseek-reasoner` IDs are not available there.
+
+Hy4 is Tencent's 770B-total / 49B-active flagship announced 2026-11-04, with
+strong agentic-coding scores but a high hallucination rate on knowledge it does
+not have (89% on AA-Omniscience). That makes it suitable as a critic and
+option-generator, not as a source of truth; the orchestrator must verify claims.
+
+## Risks
+
+- opencode v2 config/agent schema is new and may change; the generator is
+  isolated in one module and verified with `opencode --standalone debug agents`.
+- `OPENCODE_CONFIG` is honored only with `--standalone` on opencode 2.3.2; the
+  helper always passes it.
+- Keyring requires an unlocked Secret Service session; headless/CI users must
+  use env vars.
+- Peer context is bounded by attached files; the orchestrator must curate them.
+- Two CLIs with different permission models: keep the driver-only rule strict.
+
+## Sources
+
+- Tencent Hy4 announcement: https://www.tencent.com/tencent-launches-hy4-joining-the-ranks-of-the-worlds-leading-open-source-ai-models/
+- Hy4 coverage: https://www.heise.de/en/news/Tencent-Hy4-New-AI-model-joins-China-s-top-tier-11513717.html
+- OpenRouter model catalog: https://openrouter.ai/api/v1/models
+- opencode providers docs: https://opencode.ai/docs/providers/
+- opencode agents docs: https://opencode.ai/docs/agents/
