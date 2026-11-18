@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .backups import backup_file
+
 REQUIRED_ROLES = ("orchestrator", "reviewer", "test_runner")
 PROTOCOLS = ("anthropic", "openai")
 KINDS = ("custom", "builtin")
@@ -306,11 +308,16 @@ def save_config(config: Config, path: Path | None = None) -> Path:
     config.validate()
     target = path or config_path()
     target.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(config.to_dict(), indent=2) + "\n"
+    if target.exists():
+        try:
+            if target.read_text(encoding="utf-8") == payload:
+                return target
+        except OSError:
+            pass
+        backup_file(target)
     tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(
-        json.dumps(config.to_dict(), indent=2) + "\n",
-        encoding="utf-8",
-    )
+    tmp.write_text(payload, encoding="utf-8")
     os.chmod(tmp, 0o600)
     os.replace(tmp, target)
     return target

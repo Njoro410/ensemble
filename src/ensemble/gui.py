@@ -34,6 +34,7 @@ from .launch import (  # noqa: E402
 from .opencode_config import opencode_config_path, write_opencode_config  # noqa: E402
 from .secrets import (  # noqa: E402
     SecretError,
+    keyring_available,
     resolve_secret,
     set_secret,
 )
@@ -131,6 +132,11 @@ class ProviderDialog(Gtk.Dialog):
         self.key_entry.set_visibility(False)
         self.key_entry.set_input_purpose(Gtk.InputPurpose.PASSWORD)
         self.key_entry.set_placeholder_text("Leave blank to keep the stored key")
+        self.file_check = Gtk.CheckButton(
+            label=(
+                "Store in a protected 0600 file if the keyring is unavailable"
+            )
+        )
         self.key_status = _dim(Gtk.Label())
         self.feedback = Gtk.Label(xalign=0)
         self.feedback.set_line_wrap(True)
@@ -151,6 +157,7 @@ class ProviderDialog(Gtk.Dialog):
             ("Auth header", self.auth_combo),
             ("Models (comma-separated)", models_box),
             ("API key", self.key_entry),
+            ("Key fallback", self.file_check),
             ("", self.key_status),
         ]
         for index, (label, widget) in enumerate(rows):
@@ -250,6 +257,9 @@ class ProviderDialog(Gtk.Dialog):
 
     def key_value(self) -> str:
         return self.key_entry.get_text().strip()
+
+    def allow_file_value(self) -> bool:
+        return self.file_check.get_active()
 
     def _current_models(self) -> list[str]:
         return [
@@ -396,7 +406,11 @@ class ProvidersPage:
             key = dialog.key_value()
             if key:
                 try:
-                    set_secret(provider, key)
+                    set_secret(
+                        provider,
+                        key,
+                        allow_file=dialog.allow_file_value(),
+                    )
                 except SecretError as exc:
                     self.window.error("Could not store the key", str(exc))
                     return
@@ -419,7 +433,11 @@ class ProvidersPage:
             key = dialog.key_value()
             if key:
                 try:
-                    set_secret(updated, key)
+                    set_secret(
+                        updated,
+                        key,
+                        allow_file=dialog.allow_file_value(),
+                    )
                 except SecretError as exc:
                     self.window.error("Could not store the key", str(exc))
                     return
@@ -730,11 +748,19 @@ class MainWindow(Gtk.ApplicationWindow):
         self.providers_page.refresh()
         self.roles_page.refresh()
         self.launch_page.refresh()
+        messages = []
         if self.config_error:
-            self.show_info(
-                f"{self.config_error} Defaults were loaded from the environment. "
-                "Click Save & Apply to write them."
+            messages.append(
+                f"{self.config_error} Defaults were loaded from the environment; "
+                "click Save & Apply to write them."
             )
+        if not keyring_available():
+            messages.append(
+                "OS keyring unavailable: keys can come from env vars, or from the "
+                "opt-in protected file when storing a key."
+            )
+        if messages:
+            self.show_info(" ".join(messages))
         self.show_all()
         pages = {"providers": 0, "roles": 1, "launch": 2}
         self.notebook.set_current_page(pages.get(initial_tab, 0))

@@ -1,7 +1,7 @@
 # Ensemble — multi-provider control plane and peer protocol
 
 **Date:** 2026-11-18
-**Status:** approved; Phases 1–3 complete; Hy4/MiMo contract test pending an
+**Status:** approved; Phases 1–4 complete; Hy4/MiMo contract test pending an
 OpenRouter key
 
 ## Goal
@@ -41,6 +41,9 @@ role assignments, then launches an orchestrator terminal.
 7. **Cost/latency-appropriate roles.** Hy4 review turns cost roughly cents;
    MiMo flash test plans cost fractions of a cent. Default budget cap $0.50 per
    run directory.
+8. **No global opencode config merge.** Peer runs use `OPENCODE_CONFIG`; the
+   user's `~/.config/opencode/` is left untouched. `ensemble opencode apply
+   --print` supports manual reuse if wanted.
 
 ## Architecture
 
@@ -139,9 +142,11 @@ The peer helper passes `OPENCODE_CONFIG` to point at this file. It also passes
 - Keyring service `ensemble`, username = provider id.
 - Resolution order: keyring, then the provider's configured env var.
 - `ensemble key set` reads via getpass or stdin; never accepts a key argument.
-- Launch exports keys in-process; nothing secret is written to `launch.sh`.
-- Protected-file fallback is deferred to Phase 4 (the keyring is available on
-  this machine; headless use can rely on env vars).
+- Launch exports keys in-process; no launcher file or secret is written.
+- Opt-in protected-file fallback: `--allow-file` stores keys in
+  `~/.config/ensemble/secrets.json` (0600, atomic write) when the keyring cannot
+  be used. Resolution order is keyring → protected file → env. The file is
+  plaintext, so it is never used automatically.
 
 ## Collaboration protocol
 
@@ -190,6 +195,12 @@ orchestrator environment, resolves the key from the keyring in-process, and
 `exec`s `claude`; no launcher file or secret is written. `ensemble gui --tab
 providers|roles|launch` opens a specific tab.
 
+`ensemble desktop install` writes
+`~/.local/share/applications/ensemble.desktop` and a hicolor icon. Generated
+`config.json` and `opencode.json` files are copied to
+`~/.config/ensemble/backups/` when their content changes, keeping the newest
+five per file.
+
 ## Failure handling
 
 - Missing key / locked keyring: abort with provider name; suggest env var.
@@ -224,8 +235,9 @@ providers|roles|launch` opens a specific tab.
    absolute binary paths.
 3. **GUI (Phase 3, done):** GTK3 control panel, first-run import, Apply +
    Launch. Verified with Xvfb screenshots and a Save & Apply integration test.
-4. **Polish (Phase 4):** model discovery UI, global-config option, backup
-   management, protected-file fallback, `.desktop` packaging, docs.
+4. **Polish (Phase 4, done):** `.desktop` entry + icon, opt-in protected-file
+   fallback, backup rotation, and docs. Global opencode merge intentionally
+   omitted in favor of `OPENCODE_CONFIG` isolation.
 
 ## Model notes (as of 2026-11-18)
 
@@ -254,6 +266,8 @@ option-generator, not as a source of truth; the orchestrator must verify claims.
   use env vars.
 - The GUI venv must be created with `--system-site-packages` so PyGObject/GTK3
   are importable; pip-installed packages still take precedence.
+- The protected-file fallback is plaintext; it is opt-in per key and 0600, but
+  users with a working keyring should not need it.
 - Peer context is bounded by attached files; the orchestrator must curate them.
 - Two CLIs with different permission models: keep the driver-only rule strict.
 

@@ -22,6 +22,7 @@ from .config import (
     load_config,
     save_config,
 )
+from .desktop import DesktopError, install_desktop, uninstall_desktop
 from .launch import LaunchError, build_launch_plan, redacted_preview
 from .opencode_config import (
     ROLE_AGENTS,
@@ -35,6 +36,7 @@ from .secrets import (
     keyring_available,
     keyring_description,
     resolve_secret,
+    secrets_file_path,
     set_secret,
 )
 from .skill import SkillError, install_skill
@@ -152,8 +154,8 @@ def cmd_key_set(args: argparse.Namespace) -> int:
         secret = sys.stdin.readline().rstrip("\n")
     else:
         secret = getpass.getpass(f"API key for {provider.id} (hidden): ")
-    set_secret(provider, secret)
-    print(f"Stored the key for {provider.id} in the OS keyring.")
+    set_secret(provider, secret, allow_file=args.allow_file)
+    print(f"Stored the key for {provider.id}.")
     return 0
 
 
@@ -162,8 +164,8 @@ def cmd_key_import_env(args: argparse.Namespace) -> int:
     provider = config.providers.get(args.provider)
     if provider is None:
         raise ConfigError(f"Unknown provider {args.provider!r}")
-    variable = import_from_env(provider)
-    print(f"Imported ${variable} into the OS keyring for {provider.id}.")
+    variable = import_from_env(provider, allow_file=args.allow_file)
+    print(f"Stored ${variable} for {provider.id}.")
     return 0
 
 
@@ -214,6 +216,25 @@ def cmd_gui(args: argparse.Namespace) -> int:
     if args.smoke_test:
         return smoke_test()
     return gui_main(["ensemble"], initial_tab=args.tab)
+
+
+def cmd_desktop_install(args: argparse.Namespace) -> int:
+    entry, icon, changed = install_desktop(force=args.force)
+    prefix = "Installed" if changed else "Already up to date:"
+    print(f"{prefix} {entry}")
+    print(f"Icon: {icon}")
+    print("Ensemble should appear in your application menu.")
+    return 0
+
+
+def cmd_desktop_uninstall(args: argparse.Namespace) -> int:
+    removed = uninstall_desktop()
+    if not removed:
+        print("Nothing to remove.")
+        return 0
+    for path in removed:
+        print(f"Removed {path}")
+    return 0
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -277,6 +298,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         f"  keyring: {keyring_description()} "
         f"({'available' if keyring_available() else 'unavailable'})"
     )
+    if secrets_file_path().exists():
+        print(f"  protected-file secrets: {secrets_file_path()}")
 
     for provider_id in sorted(config.providers):
         provider = config.providers[provider_id]
@@ -400,9 +423,19 @@ def build_parser() -> argparse.ArgumentParser:
     key_set = key_sub.add_parser("set")
     key_set.add_argument("provider")
     key_set.add_argument("--stdin", action="store_true")
+    key_set.add_argument(
+        "--allow-file",
+        action="store_true",
+        help="fall back to a protected 0600 file if the keyring is unavailable",
+    )
     key_set.set_defaults(func=cmd_key_set)
     key_import = key_sub.add_parser("import-env")
     key_import.add_argument("provider")
+    key_import.add_argument(
+        "--allow-file",
+        action="store_true",
+        help="fall back to a protected 0600 file if the keyring is unavailable",
+    )
     key_import.set_defaults(func=cmd_key_import_env)
     key_status = key_sub.add_parser("status")
     key_status.set_defaults(func=cmd_key_status)
@@ -430,6 +463,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gui.set_defaults(func=cmd_gui)
 
+    desktop = sub.add_parser(
+        "desktop", help="Install or remove the application launcher"
+    )
+    desktop_sub = desktop.add_subparsers(
+        dest="desktop_command", required=True
+    )
+    desktop_install = desktop_sub.add_parser("install")
+    desktop_install.add_argument("--force", action="store_true")
+    desktop_install.set_defaults(func=cmd_desktop_install)
+    desktop_uninstall = desktop_sub.add_parser("uninstall")
+    desktop_uninstall.set_defaults(func=cmd_desktop_uninstall)
+
     doctor = sub.add_parser("doctor", help="Check configuration and keys")
     doctor.set_defaults(func=cmd_doctor)
 
@@ -449,7 +494,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except (ConfigError, SecretError, SkillError, LaunchError) as exc:
+    except (ConfigError, SecretError, SkillError, LaunchError, DesktopError) as exc:
         print(f"ensemble: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

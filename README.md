@@ -32,6 +32,9 @@ python3 -m venv --system-site-packages .venv
 
 # Install the Claude Code skill (writes ~/.claude/skills/ensemble/SKILL.md).
 .venv/bin/ensemble skill install
+
+# Add an application-menu launcher and icon.
+.venv/bin/ensemble desktop install
 ```
 
 ## Claude Code skill
@@ -64,6 +67,25 @@ Three tabs:
 
 `ensemble gui --tab providers|roles|launch` opens a specific tab directly.
 
+## Key storage and backups
+
+Keys go to the OS keyring by default. On headless or locked-keyring systems,
+`ensemble key set PROVIDER --allow-file` opts into a plaintext
+`~/.config/ensemble/secrets.json` (0600, atomic write). Resolution order is
+keyring → protected file → the provider's env var. Nothing is ever written to
+config files or command lines.
+
+Generated `config.json` and `opencode.json` are backed up to
+`~/.config/ensemble/backups/` whenever their content changes; the newest five
+per file are kept.
+
+## Desktop launcher
+
+`ensemble desktop install` writes
+`~/.local/share/applications/ensemble.desktop` plus a hicolor icon, so Ensemble
+appears in the Cinnamon application menu. Remove it with
+`ensemble desktop uninstall`.
+
 ## Run a peer call
 
 ```bash
@@ -95,11 +117,12 @@ paths resolve relative to `--cwd`.
 
 ## Status
 
-Phases 1–3 work end to end: config/keyring, the read-only peer runner, the
-`/ensemble` skill, and the GTK control panel. A real read-only reviewer call
-through opencode + DeepSeek was verified (reply, cost/token metadata, run
-artifacts, tree guard), and the GUI was smoke-tested under Xvfb. The Hy4/MiMo
-contract test needs an OpenRouter key:
+All four phases are implemented: config/keyring, read-only peer runner, the
+`/ensemble` skill, the GTK control panel, desktop packaging, protected-file
+fallback, and backup rotation. A real read-only reviewer call through
+opencode + DeepSeek was verified (reply, cost/token metadata, run artifacts,
+tree guard), and the GUI was smoke-tested under Xvfb. The Hy4/MiMo contract
+test needs an OpenRouter key:
 
 ```bash
 .venv/bin/ensemble key set openrouter
@@ -116,12 +139,14 @@ ensemble providers add --id ID --label NAME --protocol openai|anthropic \
     --env-var VAR [--base-url URL] [--models a,b] [--kind custom|builtin]
 ensemble roles show
 ensemble roles set ROLE PROVIDER MODEL [--small-model MODEL]
-ensemble key set PROVIDER [--stdin]
-ensemble key import-env PROVIDER
+ensemble key set PROVIDER [--stdin] [--allow-file]
+ensemble key import-env PROVIDER [--allow-file]
 ensemble key status
 ensemble opencode apply [--print]
 ensemble skill install [--force]
 ensemble gui [--tab providers|roles|launch]
+ensemble desktop install [--force]
+ensemble desktop uninstall
 ensemble doctor
 ensemble launch [--repo DIR] [--dry-run] [-- CLAUDE_ARGS...]
 ensemble-peer ask --role ROLE --brief FILE [--cwd DIR] [--file PATH]...

@@ -20,7 +20,7 @@ ensemble-peer = "ensemble.peer:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ensemble = ["skill_template.md"]
+ensemble = ["skill_template.md", "data/ensemble.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

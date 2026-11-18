@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .backups import backup_file
 from .config import Config, config_dir
 
 OPENCODE_SCHEMA = "https://opencode.ai/config.json"
@@ -91,8 +92,16 @@ def write_opencode_config(config: Config, path: Path | None = None) -> Path:
     target = path or opencode_config_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = build_opencode_config(config)
+    text = json.dumps(payload, indent=2) + "\n"
+    if target.exists():
+        try:
+            if target.read_text(encoding="utf-8") == text:
+                return target
+        except OSError:
+            pass
+        backup_file(target)
     tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8")
     os.chmod(tmp, 0o600)
     os.replace(tmp, target)
     return target
