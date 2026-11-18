@@ -66,6 +66,16 @@ def test_roles_set_rejects_openai_orchestrator(tmp_path):
     assert "Anthropic-compatible" in result.stderr
 
 
+def test_roles_catalog_lists_all_roles(tmp_path):
+    config_home = tmp_path / "config"
+    assert run_cli(config_home, "init").returncode == 0
+    result = run_cli(config_home, "roles", "catalog")
+    assert result.returncode == 0, result.stderr
+    assert "planner | Planner | core" in result.stdout
+    assert "security_reviewer | Security Reviewer | specialized" in result.stdout
+    assert "(unassigned)" in result.stdout
+
+
 def test_providers_add_preset(tmp_path):
     config_home = tmp_path / "config"
     assert run_cli(config_home, "init").returncode == 0

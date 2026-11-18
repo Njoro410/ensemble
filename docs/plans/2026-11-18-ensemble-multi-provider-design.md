@@ -1,8 +1,8 @@
 # Ensemble — multi-provider control plane and peer protocol
 
 **Date:** 2026-11-18
-**Status:** approved; Phases 1–4 complete; live discovery, 13-role catalog, and
-Haiku/peer acceptance verified
+**Status:** approved; Phases 1–5 complete; live discovery, 13-role catalog,
+Haiku/peer acceptance, and the adaptive goal pipeline verified
 
 ## Goal
 
@@ -184,10 +184,12 @@ DeepSeek remains a custom Anthropic-compatible provider for Claude Code.
 
 Claude Code skill (Phase 2) exposes:
 
+- `/ensemble goal <task>` — adaptive full pipeline through the role catalog.
 - `/ensemble brainstorm <task>` — brief → reviewer → test-runner → synthesis;
   optional second round where the reviewer sees the revision.
 - `/ensemble review [paths]` — reviewer only.
 - `/ensemble verify` — test-run plan only.
+- `/ensemble role <role-id> <task>` — any peer role.
 - `/ensemble status` — show roles, models, and recent run artifacts.
 
 `ensemble skill install` writes `~/.claude/skills/ensemble/SKILL.md` with the
@@ -235,6 +237,29 @@ Two substitutions are deliberate: OpenCode Go routes GPT-6 Luna with a
 provider-hosted tool that the routed Chat endpoint rejects, so Docs uses Claude
 Haiku (OpenRouter GPT-6 Luna remains selectable); DeepSeek V4.1 Flash is
 region-gated until the Console is set to Global, so Tester uses MiMo.
+
+## Goal pipeline (Phase 5)
+
+`/ensemble goal <task>` makes the 13 roles cooperate on one goal:
+
+1. **Frame** — write the brief and acceptance criteria; use `roles catalog` to
+   select roles and record the rationale.
+2. **Plan** — Explorer/Architect/Planner, then a **plan-approval gate** before
+   any edits.
+3. **Implement** — Coder/Refactorer proposes patches; Claude Code applies them
+   and runs focused tests after each task.
+4. **Review** — Reviewer, Security Reviewer, and Database Agent run in parallel
+   on the diff; Claude Code fixes blocking findings.
+5. **Verify** — Tester proposes commands; Claude Code executes them and records
+   real output. Debugger/Coder handle failures for up to two cycles.
+6. **Finish** — Docs and Release prepare documentation and a rollback checklist;
+   `RUN/report.md` records changes, real test evidence, findings, risks, and
+   peer cost.
+
+Role selection is adaptive: Planner/Reviewer/Tester are always included;
+Explorer, Architect, Security, Database, Debugger, Coder/Refactorer, Docs, and
+Release are added only when the task shape requires them. All peers remain
+read-only; Claude Code is the sole writer and executor.
 
 ## GUI (Phase 3)
 
@@ -297,6 +322,9 @@ five per file.
 4. **Polish (Phase 4, done):** `.desktop` entry + icon, opt-in protected-file
    fallback, backup rotation, and docs. Global opencode merge intentionally
    omitted in favor of `OPENCODE_CONFIG` isolation.
+5. **Goal pipeline (Phase 5, done):** `/ensemble goal` adaptive role selection,
+   plan approval gate, parallel reviews, test-evidence loop, Docs/Release
+   handoff, and `roles catalog`.
 
 ## Model notes (as of 2026-11-18)
 

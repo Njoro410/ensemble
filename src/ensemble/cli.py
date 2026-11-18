@@ -227,6 +227,21 @@ def cmd_roles_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_roles_catalog(args: argparse.Namespace) -> int:
+    config = load_config()
+    for role in ROLE_ORDER:
+        spec = ROLE_SPECS[role]
+        assignment = config.roles.get(role)
+        assigned = (
+            f"{assignment.provider}/{assignment.model}"
+            if assignment is not None
+            else "(unassigned)"
+        )
+        print(f"{role} | {spec.title} | {spec.group} | {assigned}")
+        print(f"  {spec.description}")
+    return 0
+
+
 def cmd_roles_seed(args: argparse.Namespace) -> int:
     config = load_config()
     results = seed_assignments(config, force=args.force)
@@ -561,6 +576,8 @@ def build_parser() -> argparse.ArgumentParser:
     roles_seed = roles_sub.add_parser("seed")
     roles_seed.add_argument("--force", action="store_true")
     roles_seed.set_defaults(func=cmd_roles_seed)
+    roles_catalog = roles_sub.add_parser("catalog")
+    roles_catalog.set_defaults(func=cmd_roles_catalog)
 
     key = sub.add_parser("key", help="Manage API keys in the OS keyring")
     key_sub = key.add_subparsers(dest="key_command", required=True)

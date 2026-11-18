@@ -42,11 +42,18 @@ python3 -m venv --system-site-packages .venv
 Restart or reload Claude Code after installing, then:
 
 ```
+/ensemble goal <task>          # adaptive full pipeline
 /ensemble brainstorm <task>
 /ensemble review [paths]
 /ensemble verify [paths]
+/ensemble role <role-id> <task>
 /ensemble status
 ```
+
+`goal` is the team workflow: the orchestrator selects the relevant roles,
+plans, implements through Coder proposals, runs parallel reviews, verifies with
+real test output, and finishes with Docs/Release. Every peer stays read-only;
+Claude Code applies every change.
 
 The installed skill embeds absolute paths to this venv's `ensemble` and
 `ensemble-peer`, so it works without PATH changes.
@@ -173,9 +180,11 @@ paths resolve relative to `--cwd`.
 
 Everything is implemented and verified with the stored keys:
 
-- **13 roles** seeded; the orchestrator runs **Claude Haiku 5.5** through
-  OpenRouter's Anthropic surface (`https://openrouter.ai/api`), and a
-  non-interactive Claude Code launch returned `READY`.
+- **13 roles** seeded; `/ensemble goal` runs the adaptive full pipeline
+  (plan → approval gate → implement → parallel review → verify → docs/release).
+- The orchestrator runs **Claude Haiku 5.5** through OpenRouter's Anthropic
+  surface (`https://openrouter.ai/api`), and a non-interactive Claude Code
+  launch returned `READY`.
 - **OpenRouter** — 443 models; Hy4 review ($0.0048) and MiMo test plan
   ($0.0012) passed earlier.
 - **OpenCode Go** — 32 models; real Planner (Gemini), Reviewer (Grok), Coder
@@ -203,6 +212,7 @@ ensemble providers add --id ID --label NAME --protocol openai|anthropic \
 ensemble providers add --preset openrouter|openrouter-anthropic|opencode-go|deepseek [--force]
 ensemble providers discover PROVIDER | --all
 ensemble roles show
+ensemble roles catalog
 ensemble roles seed [--force]
 ensemble roles set ROLE PROVIDER MODEL [--small-model MODEL]
 ensemble key set PROVIDER [--stdin] [--allow-file]

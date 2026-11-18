@@ -40,6 +40,8 @@ def test_skill_install_and_idempotent(tmp_path):
     assert "{{ENSEMBLE_BIN}}" not in text
     assert "{{ENSEMBLE_PEER}}" not in text
     assert "edit`/`shell` denied" in text
+    assert "Mode: goal" in text
+    assert "roles catalog" in text
 
     second = run_cli(claude_home, "skill", "install")
     assert second.returncode == 0, second.stderr

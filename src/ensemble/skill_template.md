@@ -1,7 +1,7 @@
 ---
 name: ensemble
-description: Multi-model ensemble orchestration. Use when the user asks to /ensemble, brainstorm with peer models, cross-review code or a plan, request an independent test plan, or inspect ensemble status. Peers are read-only; the orchestrator remains the only writer.
-argument-hint: "brainstorm <task> | review [paths] | verify [paths] | status"
+description: Multi-model ensemble orchestration. Use when the user asks to /ensemble, run a goal through the 13-role pipeline, brainstorm with peer models, cross-review code or a plan, request an independent test plan, or inspect ensemble status. Peers are read-only; the orchestrator remains the only writer.
+argument-hint: "goal <task> | brainstorm <task> | review [paths] | verify [paths] | role <role-id> <task> | status"
 ---
 
 # Ensemble orchestrator
@@ -22,7 +22,8 @@ PATH and tell the user to re-run `{{ENSEMBLE_BIN}} skill install`.
 
 `$ARGUMENTS` selects one mode:
 
-- `brainstorm <task>` — reviewer + test-runner, then synthesis (default)
+- `goal <task>` — adaptive full pipeline through the 13-role catalog
+- `brainstorm <task>` — reviewer + test-runner, then synthesis
 - `review [paths]` — reviewer only
 - `verify [paths]` — test-runner only
 - `role <role-id> <task>` — ask any peer role (planner, coder, reviewer,
@@ -38,7 +39,8 @@ task or the paths.
 1. Run `{{ENSEMBLE_BIN}} doctor`. If a needed key is missing, stop and give the
    exact fix: `{{ENSEMBLE_BIN}} key set <provider>` or export the provider's
    env var. Never ask for a key in chat.
-2. Run `{{ENSEMBLE_BIN}} roles show` and state the three models in one line.
+2. Run `{{ENSEMBLE_BIN}} roles show` and state the orchestrator plus the peer
+   roles selected for this run.
 3. Verify the working directory is inside a git repo:
    `git rev-parse --show-toplevel`. If not, explain that the tree guard needs
    git and ask whether to continue without it.
@@ -92,6 +94,77 @@ into chat.
    update `decision.md`. Use `prefs.rounds` from
    `{{ENSEMBLE_BIN}} config show` as the maximum (default 2).
 
+## Mode: goal
+
+`/ensemble goal <task>` drives a goal through the role catalog. You are the
+only writer/executor; every peer is read-only.
+
+### 1. Frame
+
+- Create RUN.
+- Write `RUN/brief.md`: goal, constraints, non-goals, acceptance criteria,
+  relevant paths, and a compact diff/file summary.
+- Run `{{ENSEMBLE_BIN}} roles catalog` and select roles using the heuristics
+  below. Record the selection and why in `RUN/plan.md`.
+- Announce the selected roles/models in one line.
+
+Always include Planner (unless trivial), Reviewer, and Tester. Add:
+
+- **Explorer** — unfamiliar repo/area or unclear call paths.
+- **Architect** — new subsystem or API/schema/cross-cutting design.
+- **Security Reviewer** — auth, authz, payments, PII, secrets, uploads,
+  external input.
+- **Database** — schema, migrations, indexes, transactions, query performance.
+- **Debugger** — bug fix or failing tests.
+- **Coder** — any code change; use **Refactorer** instead for behavior-
+  preserving cleanup.
+- **Docs** — user-facing behavior, API, config, CLI, or deployment changes.
+- **Release** — CI/CD, Docker, dependencies, environment, or deploy changes.
+
+Skip roles that do not apply.
+
+### 2. Plan (read-only)
+
+- Call Explorer/Architect (in parallel when independent), then Planner.
+- Require tasks, dependencies, acceptance criteria, and risks; write
+  `RUN/plan.md`.
+- **Gate:** present the plan and role lineup, and ask for approval. Do not edit
+  files before approval.
+
+### 3. Implement
+
+- Call Coder (or Refactorer) one task at a time. The peer proposes patches or
+  steps; you apply them and run focused tests/lints after each task.
+- Send failures back to the Coder or Debugger with the actual output.
+- Do not let peers redesign unrelated code.
+
+### 4. Review
+
+- Call Reviewer, Security Reviewer, and Database (if selected) with the diff and
+  relevant files. Run independent reviews in parallel; they can share RUN
+  because filenames include the role.
+- Write `RUN/review.md` with findings by severity. Fix blocking issues, then
+  rerun focused tests.
+
+### 5. Verify
+
+- Tester produces the plan; you execute the commands and capture real output.
+- Write `RUN/verification.md` with commands and results.
+- On failures: Debugger diagnoses, Coder proposes a fix, you apply and rerun.
+  Maximum two fix cycles.
+- Never claim a test passed unless you ran it.
+
+### 6. Finish
+
+- Docs (if selected) proposes documentation; you apply it.
+- Release (if selected) prepares a release/rollback checklist; no production
+  actions.
+- Write `RUN/report.md`: goal, changes, tests actually run, findings and
+  resolutions, remaining risks, artifacts, and peer cost.
+- Summarize to the user. Do not commit unless asked.
+
+Stop if `prefs.budget_usd` is reached or a stage needs more than two rounds.
+
 ## Mode: review
 
 1. Determine the target: the given paths, else `git diff`, else
@@ -110,7 +183,8 @@ into chat.
 
 ## Mode: role
 
-1. Run `{{ENSEMBLE_BIN}} roles show` and confirm the requested role exists.
+1. Run `{{ENSEMBLE_BIN}} roles show` and, if needed,
+   `{{ENSEMBLE_BIN}} roles catalog` to confirm the requested role exists.
 2. Write `RUN/brief.md` with the task, constraints, and the relevant files.
 3. Call the peer with `--role <role-id> --round 1`.
 4. Summarize the reply. All peer roles are read-only advisors: coder,
