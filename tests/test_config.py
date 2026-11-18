@@ -48,6 +48,13 @@ def test_custom_provider_requires_base_url():
         config.validate()
 
 
+def test_rounds_must_be_between_one_and_three():
+    config = default_config()
+    config.prefs.rounds = 4
+    with pytest.raises(ConfigError, match="rounds"):
+        config.validate()
+
+
 def test_roundtrip_and_permissions(tmp_path, monkeypatch):
     monkeypatch.setenv("ENSEMBLE_CONFIG_DIR", str(tmp_path / "cfg"))
     config = default_config()

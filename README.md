@@ -11,6 +11,9 @@ Design: [docs/plans/2026-11-18-ensemble-multi-provider-design.md](docs/plans/202
 
 ```bash
 cd ~/projects/ensemble
+
+# The GUI needs system PyGObject/GTK3, so include system site-packages.
+python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -e .
 
 # Create ~/.config/ensemble/config.json, importing your current
@@ -45,6 +48,22 @@ Restart or reload Claude Code after installing, then:
 The installed skill embeds absolute paths to this venv's `ensemble` and
 `ensemble-peer`, so it works without PATH changes.
 
+## Control panel
+
+```bash
+.venv/bin/ensemble gui
+```
+
+Three tabs:
+
+- **Providers** — add/edit endpoints, store keys in the OS keyring, fetch and
+  select models, test connections.
+- **Roles** — assign orchestrator/reviewer/test-runner providers and models.
+- **Launch** — choose the repo, rounds, budget; preview the redacted
+  environment; save & apply; open an orchestrator terminal.
+
+`ensemble gui --tab providers|roles|launch` opens a specific tab directly.
+
 ## Run a peer call
 
 ```bash
@@ -76,9 +95,11 @@ paths resolve relative to `--cwd`.
 
 ## Status
 
-Phase 1 works end to end: a real read-only reviewer call through opencode +
-DeepSeek was verified (reply, cost/token metadata, run artifacts, tree guard).
-The Hy4/MiMo contract test needs an OpenRouter key:
+Phases 1–3 work end to end: config/keyring, the read-only peer runner, the
+`/ensemble` skill, and the GTK control panel. A real read-only reviewer call
+through opencode + DeepSeek was verified (reply, cost/token metadata, run
+artifacts, tree guard), and the GUI was smoke-tested under Xvfb. The Hy4/MiMo
+contract test needs an OpenRouter key:
 
 ```bash
 .venv/bin/ensemble key set openrouter
@@ -100,6 +121,7 @@ ensemble key import-env PROVIDER
 ensemble key status
 ensemble opencode apply [--print]
 ensemble skill install [--force]
+ensemble gui [--tab providers|roles|launch]
 ensemble doctor
 ensemble launch [--repo DIR] [--dry-run] [-- CLAUDE_ARGS...]
 ensemble-peer ask --role ROLE --brief FILE [--cwd DIR] [--file PATH]...

@@ -84,9 +84,10 @@ into chat.
    - cost/turn summary
 5. Give the user a compact synthesis and ask for approval **before** editing.
    Do not implement in the same turn unless the user already approved.
-6. Optional round 2 (only if asked): write `RUN/brief-round2.md` with the
-   proposed revision or diff, call the reviewer with `--round 2`, then update
-   `decision.md`. Two rounds is the default maximum.
+6. Optional additional rounds (only if asked): write `RUN/brief-roundN.md` with
+   the proposed revision or diff, call the reviewer with `--round N`, then
+   update `decision.md`. Use `prefs.rounds` from
+   `{{ENSEMBLE_BIN}} config show` as the maximum (default 2).
 
 ## Mode: review
 

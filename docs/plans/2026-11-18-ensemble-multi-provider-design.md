@@ -1,7 +1,7 @@
 # Ensemble — multi-provider control plane and peer protocol
 
 **Date:** 2026-11-18
-**Status:** approved; Phases 1–2 complete; Hy4/MiMo contract test pending an
+**Status:** approved; Phases 1–3 complete; Hy4/MiMo contract test pending an
 OpenRouter key
 
 ## Goal
@@ -106,7 +106,8 @@ source.
     "timeout_seconds": 180,
     "max_files": 20,
     "max_brief_bytes": 102400,
-    "budget_usd": 0.5
+    "budget_usd": 0.5,
+    "rounds": 2
   }
 }
 ```
@@ -183,9 +184,11 @@ Three GTK3 tabs:
 - **Launch:** repo picker, rounds (1–3), budget cap, redacted env preview,
   Save & Apply, Open Orchestrator.
 
-Launch generates `~/.config/ensemble/launch.sh` (0700, no secrets) that fetches
-keys from the keyring at runtime and `exec`s `claude`. The GUI spawns
-`gnome-terminal --working-directory <repo> -- bash -lc <launch.sh>`.
+Launch spawns `gnome-terminal --working-directory <repo> -- bash -lc
+'<python> -m ensemble.cli launch --repo <repo>'`. `ensemble launch` builds the
+orchestrator environment, resolves the key from the keyring in-process, and
+`exec`s `claude`; no launcher file or secret is written. `ensemble gui --tab
+providers|roles|launch` opens a specific tab.
 
 ## Failure handling
 
@@ -207,7 +210,8 @@ keys from the keyring at runtime and `exec`s `claude`. The GUI spawns
   env injection, run artifacts, tree guard, timeout, budget, and missing key.
 - Contract (opt-in): real Hy4 review and MiMo test plan against a throwaway
   repo with real keys.
-- GUI smoke: `xvfb-run` plus manual checklist (Phase 3).
+- GUI: module import test, Xvfb smoke test, and an Xvfb Save & Apply test that
+  writes config, opencode config, and the skill.
 
 ## Build phases
 
@@ -218,7 +222,8 @@ keys from the keyring at runtime and `exec`s `claude`. The GUI spawns
 2. **Skill (Phase 2, done):** `/ensemble` modes, logging, tree guard
    integration, budget enforcement. The install command renders the skill with
    absolute binary paths.
-3. **GUI (Phase 3):** GTK3 control panel, first-run import, Apply + Launch.
+3. **GUI (Phase 3, done):** GTK3 control panel, first-run import, Apply +
+   Launch. Verified with Xvfb screenshots and a Save & Apply integration test.
 4. **Polish (Phase 4):** model discovery UI, global-config option, backup
    management, protected-file fallback, `.desktop` packaging, docs.
 
@@ -247,6 +252,8 @@ option-generator, not as a source of truth; the orchestrator must verify claims.
   helper always passes it.
 - Keyring requires an unlocked Secret Service session; headless/CI users must
   use env vars.
+- The GUI venv must be created with `--system-site-packages` so PyGObject/GTK3
+  are importable; pip-installed packages still take precedence.
 - Peer context is bounded by attached files; the orchestrator must curate them.
 - Two CLIs with different permission models: keep the driver-only rule strict.
 

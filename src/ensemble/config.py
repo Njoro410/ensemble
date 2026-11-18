@@ -114,6 +114,7 @@ class Prefs:
     max_files: int = 20
     max_brief_bytes: int = 102_400
     budget_usd: float = 0.50
+    rounds: int = 2
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -123,6 +124,7 @@ class Prefs:
             "max_files": self.max_files,
             "max_brief_bytes": self.max_brief_bytes,
             "budget_usd": self.budget_usd,
+            "rounds": self.rounds,
         }
 
     @classmethod
@@ -134,6 +136,7 @@ class Prefs:
             max_files=int(data.get("max_files", 20)),
             max_brief_bytes=int(data.get("max_brief_bytes", 102_400)),
             budget_usd=float(data.get("budget_usd", 0.50)),
+            rounds=int(data.get("rounds", 2)),
         )
 
 
@@ -239,6 +242,8 @@ class Config:
             raise ConfigError("prefs.max_brief_bytes must be positive")
         if self.prefs.budget_usd < 0:
             raise ConfigError("prefs.budget_usd cannot be negative")
+        if self.prefs.rounds < 1 or self.prefs.rounds > 3:
+            raise ConfigError("prefs.rounds must be between 1 and 3")
 
 
 def default_config() -> Config:

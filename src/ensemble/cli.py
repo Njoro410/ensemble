@@ -22,6 +22,7 @@ from .config import (
     load_config,
     save_config,
 )
+from .launch import LaunchError, build_launch_plan, redacted_preview
 from .opencode_config import (
     ROLE_AGENTS,
     build_opencode_config,
@@ -202,6 +203,19 @@ def cmd_skill_install(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gui(args: argparse.Namespace) -> int:
+    try:
+        from .gui import main as gui_main, smoke_test
+    except ImportError as exc:
+        raise ConfigError(
+            "The GTK GUI is unavailable. Ensure PyGObject and GTK3 are "
+            f"installed ({exc})."
+        ) from exc
+    if args.smoke_test:
+        return smoke_test()
+    return gui_main(["ensemble"], initial_tab=args.tab)
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     problems: list[str] = []
     warnings: list[str] = []
@@ -292,46 +306,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 def cmd_launch(args: argparse.Namespace) -> int:
     config = load_config()
-    assignment = config.roles["orchestrator"]
-    provider = config.providers[assignment.provider]
-
-    secret, source = resolve_secret(provider)
-    if not secret:
-        ambient = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get(
-            "ANTHROPIC_API_KEY"
-        )
-        if ambient:
-            secret, source = ambient, "ambient"
-    if not secret:
-        raise ConfigError(
-            f"No API key for orchestrator provider {provider.id!r}. Run "
-            f"'ensemble key set {provider.id}' or export ${provider.env_var}."
-        )
-
     repo = Path(
         args.repo or config.prefs.default_repo or os.getcwd()
     ).expanduser().resolve()
     if not repo.is_dir():
         raise ConfigError(f"--repo is not a directory: {repo}")
 
-    env = os.environ.copy()
-    if provider.base_url:
-        env["ANTHROPIC_BASE_URL"] = provider.base_url
-    if provider.auth_style == "x-api-key":
-        env["ANTHROPIC_API_KEY"] = secret
-        env.pop("ANTHROPIC_AUTH_TOKEN", None)
-        auth_var = "ANTHROPIC_API_KEY"
-    else:
-        env["ANTHROPIC_AUTH_TOKEN"] = secret
-        env.pop("ANTHROPIC_API_KEY", None)
-        auth_var = "ANTHROPIC_AUTH_TOKEN"
-
-    model = assignment.model
-    env["ANTHROPIC_MODEL"] = model
-    env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model
-    env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model
-    env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = assignment.small_model or model
-    env["ENSEMBLE_CONFIG_DIR"] = str(config_dir())
+    plan = build_launch_plan(config)
+    plan.env["ENSEMBLE_CONFIG_DIR"] = str(config_dir())
 
     claude_args = list(args.claude_args)
     if claude_args and claude_args[0] == "--":
@@ -339,17 +321,8 @@ def cmd_launch(args: argparse.Namespace) -> int:
 
     if args.dry_run:
         print(f"repo: {repo}")
-        print(f"key source: {source}")
-        for name in (
-            "ANTHROPIC_BASE_URL",
-            "ANTHROPIC_MODEL",
-            "ANTHROPIC_DEFAULT_OPUS_MODEL",
-            "ANTHROPIC_DEFAULT_SONNET_MODEL",
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-        ):
-            if name in env:
-                print(f"{name}={env[name]}")
-        print(f"{auth_var}=<redacted>")
+        for line in redacted_preview(plan):
+            print(line)
         print("claude " + " ".join(shlex.quote(arg) for arg in claude_args))
         return 0
 
@@ -357,7 +330,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
     if not claude:
         raise ConfigError("claude not found on PATH")
     os.chdir(repo)
-    os.execvpe(claude, [claude, *claude_args], env)
+    os.execvpe(claude, [claude, *claude_args], plan.env)
     return 0  # unreachable
 
 
@@ -448,6 +421,15 @@ def build_parser() -> argparse.ArgumentParser:
     skill_install.add_argument("--force", action="store_true")
     skill_install.set_defaults(func=cmd_skill_install)
 
+    gui = sub.add_parser("gui", help="Open the GTK control panel")
+    gui.add_argument("--smoke-test", action="store_true")
+    gui.add_argument(
+        "--tab",
+        choices=["providers", "roles", "launch"],
+        default="providers",
+    )
+    gui.set_defaults(func=cmd_gui)
+
     doctor = sub.add_parser("doctor", help="Check configuration and keys")
     doctor.set_defaults(func=cmd_doctor)
 
@@ -467,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except (ConfigError, SecretError, SkillError) as exc:
+    except (ConfigError, SecretError, SkillError, LaunchError) as exc:
         print(f"ensemble: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
