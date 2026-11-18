@@ -6,6 +6,13 @@ All notable changes to Ensemble are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- GitHub Actions CI: Python 3.10–3.12 tests, GTK3/Xvfb GUI tests, and `.deb`
+  builds with artifacts plus tagged-release assets.
+- `scripts/build-deb.sh` and Debian packaging metadata for an installable
+  `ensemble_<version>_all.deb`.
+
 ## [0.1.0] - 2026-11-18
 
 ### Added

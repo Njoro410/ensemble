@@ -101,6 +101,28 @@ python3 -m venv --system-site-packages .venv
 current `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL` if present. It never copies
 keys.
 
+### Debian / Ubuntu package
+
+Tagged releases attach an `ensemble_<version>_all.deb` package:
+
+```bash
+sudo apt install ./ensemble_0.1.0_all.deb
+ensemble init
+```
+
+The package installs `/usr/bin/ensemble`, `/usr/bin/ensemble-peer`, the GTK
+launcher, and an application icon. Its Debian dependencies pull in Python 3,
+PyGObject/GTK3, `python3-keyring`, and `libsecret`. Claude Code and opencode are
+external prerequisites and are not packaged.
+
+To build the `.deb` locally:
+
+```bash
+python3 -m venv .build-venv
+.build-venv/bin/pip install --upgrade pip
+PYTHON=.build-venv/bin/python ./scripts/build-deb.sh
+```
+
 ## Quick start
 
 ```bash

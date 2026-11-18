@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Ensemble
+Comment=Claude Code multi-agent control plane
+Exec=ensemble gui
+Icon=ensemble
+Terminal=false
+Categories=Development;
+Keywords=AI;agents;Claude;opencode;
+StartupNotify=true
+StartupWMClass=Ensemble
