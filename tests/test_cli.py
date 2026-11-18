@@ -66,6 +66,26 @@ def test_roles_set_rejects_openai_orchestrator(tmp_path):
     assert "Anthropic-compatible" in result.stderr
 
 
+def test_providers_add_preset(tmp_path):
+    config_home = tmp_path / "config"
+    assert run_cli(config_home, "init").returncode == 0
+    result = run_cli(config_home, "providers", "add", "--preset", "opencode")
+    assert result.returncode == 0, result.stderr
+    data = json.loads((config_home / "config.json").read_text(encoding="utf-8"))
+    provider = data["providers"]["opencode"]
+    assert provider["kind"] == "builtin"
+    assert provider["protocol"] == "openai"
+    assert provider["models_url"].startswith("https://opencode.ai/")
+
+
+def test_presets_list(tmp_path):
+    result = run_cli(tmp_path / "config", "presets", "list")
+    assert result.returncode == 0, result.stderr
+    assert "openrouter" in result.stdout
+    assert "opencode" in result.stdout
+    assert "deepseek" in result.stdout
+
+
 def test_launch_dry_run_redacts_key(tmp_path, monkeypatch):
     config_home = tmp_path / "config"
     assert run_cli(config_home, "init").returncode == 0

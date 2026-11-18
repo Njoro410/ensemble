@@ -24,7 +24,7 @@ from .config import (  # noqa: E402
     load_config,
     save_config,
 )
-from .discovery import DiscoveryError, fetch_models  # noqa: E402
+from .discovery import DiscoveryError, discover_provider  # noqa: E402
 from .launch import (  # noqa: E402
     LaunchError,
     build_launch_plan,
@@ -32,6 +32,7 @@ from .launch import (  # noqa: E402
     terminal_command,
 )
 from .opencode_config import opencode_config_path, write_opencode_config  # noqa: E402
+from .presets import PRESETS, provider_from_preset  # noqa: E402
 from .secrets import (  # noqa: E402
     SecretError,
     keyring_available,
@@ -108,7 +109,9 @@ class ProviderDialog(Gtk.Dialog):
         super().__init__(title=title, transient_for=parent, modal=True)
         self.provider = provider
         self.config = config
-        self.set_default_size(600, 520)
+        self.models_url = provider.models_url if provider else ""
+        self.verify_url = provider.verify_url if provider else ""
+        self.set_default_size(600, 560)
         self.add_button("Cancel", Gtk.ResponseType.CANCEL)
         self.save_button = self.add_button("Save", Gtk.ResponseType.OK)
 
@@ -128,6 +131,12 @@ class ProviderDialog(Gtk.Dialog):
         self.base_entry = Gtk.Entry()
         self.env_entry = Gtk.Entry()
         self.models_entry = Gtk.Entry()
+        self.preset_combo = Gtk.ComboBoxText()
+        self.preset_combo.append("custom", "Custom provider")
+        for preset in PRESETS.values():
+            self.preset_combo.append(preset.id, f"{preset.label} preset")
+        self.preset_combo.set_active_id("custom")
+        self.preset_combo.connect("changed", self._on_preset_changed)
         self.key_entry = Gtk.Entry()
         self.key_entry.set_visibility(False)
         self.key_entry.set_input_purpose(Gtk.InputPurpose.PASSWORD)
@@ -147,19 +156,24 @@ class ProviderDialog(Gtk.Dialog):
         self.fetch_button.connect("clicked", self._on_fetch)
         models_box.pack_start(self.fetch_button, False, False, 0)
 
-        rows = [
-            ("ID", self.id_entry),
-            ("Label", self.label_entry),
-            ("Protocol", self.protocol_combo),
-            ("Provider type", self.kind_combo),
-            ("Base URL", self.base_entry),
-            ("API key env var", self.env_entry),
-            ("Auth header", self.auth_combo),
-            ("Models (comma-separated)", models_box),
-            ("API key", self.key_entry),
-            ("Key fallback", self.file_check),
-            ("", self.key_status),
-        ]
+        rows = []
+        if provider is None:
+            rows.append(("Preset", self.preset_combo))
+        rows.extend(
+            [
+                ("ID", self.id_entry),
+                ("Label", self.label_entry),
+                ("Protocol", self.protocol_combo),
+                ("Provider type", self.kind_combo),
+                ("Base URL", self.base_entry),
+                ("API key env var", self.env_entry),
+                ("Auth header", self.auth_combo),
+                ("Models (comma-separated)", models_box),
+                ("API key", self.key_entry),
+                ("Key fallback", self.file_check),
+                ("", self.key_status),
+            ]
+        )
         for index, (label, widget) in enumerate(rows):
             grid.attach(Gtk.Label(label=label, xalign=0), 0, index, 1, 1)
             grid.attach(widget, 1, index, 1, 1)
@@ -213,6 +227,48 @@ class ProviderDialog(Gtk.Dialog):
         self.env_entry.set_text(f"{raw}_API_KEY" if raw else "")
         self._updating_env = False
 
+    def _on_preset_changed(self, combo: Gtk.ComboBoxText) -> None:
+        preset_id = combo.get_active_id()
+        if preset_id in PRESETS:
+            provider = provider_from_preset(preset_id)
+            self._env_touched = True
+            self.id_entry.set_text(provider.id)
+            self.id_entry.set_sensitive(False)
+            self.label_entry.set_text(provider.label)
+            self.protocol_combo.set_active_id(provider.protocol)
+            self.kind_combo.set_active_id(provider.kind)
+            self.auth_combo.set_active_id(provider.auth_style)
+            self.base_entry.set_text(provider.base_url)
+            self.env_entry.set_text(provider.env_var)
+            self.models_url = provider.models_url
+            self.verify_url = provider.verify_url
+            for widget in (
+                self.protocol_combo,
+                self.kind_combo,
+                self.base_entry,
+                self.env_entry,
+                self.auth_combo,
+            ):
+                widget.set_sensitive(False)
+            self.feedback.set_text(
+                "Preset loaded. Enter an API key, then Fetch models."
+            )
+        else:
+            self.id_entry.set_sensitive(True)
+            self.models_url = ""
+            self.verify_url = ""
+            for widget in (
+                self.protocol_combo,
+                self.kind_combo,
+                self.base_entry,
+                self.env_entry,
+                self.auth_combo,
+            ):
+                widget.set_sensitive(True)
+            self.feedback.set_text(
+                "Custom provider: set the endpoint and env var manually."
+            )
+
     def _on_env_edited(self, _entry: Gtk.Entry) -> None:
         if not self._updating_env:
             self._env_touched = True
@@ -252,6 +308,8 @@ class ProviderDialog(Gtk.Dialog):
             base_url=self.base_entry.get_text().strip(),
             kind=self.kind_combo.get_active_id() or "custom",
             auth_style=self.auth_combo.get_active_id() or "bearer",
+            models_url=self.models_url,
+            verify_url=self.verify_url,
             models=models,
         )
 
@@ -280,12 +338,15 @@ class ProviderDialog(Gtk.Dialog):
         key = self.key_entry.get_text().strip()
         if not key and self.provider is not None:
             key, _source = resolve_secret(self.provider)
+        if not key:
+            self.feedback.set_text("Enter an API key first.")
+            return
         self.fetch_button.set_sensitive(False)
         self.feedback.set_text("Fetching models…")
 
         def worker() -> None:
             try:
-                ids = fetch_models(provider.base_url, provider.protocol, key)
+                ids = discover_provider(provider, key)
                 GLib.idle_add(self._on_fetched, ids, None)
             except DiscoveryError as exc:
                 GLib.idle_add(self._on_fetched, None, str(exc))
@@ -323,6 +384,7 @@ class ProvidersPage:
         for label, handler in (
             ("Add provider", self.on_add),
             ("Edit", self.on_edit),
+            ("Discover models", self.on_discover),
             ("Remove", self.on_remove),
         ):
             button = Gtk.Button(label=label)
@@ -445,6 +507,51 @@ class ProvidersPage:
             self._after_change()
         finally:
             dialog.destroy()
+
+    def on_discover(self, _button=None) -> None:
+        provider_id = self._selected_id()
+        if provider_id is None:
+            return
+        provider = self.window.config.providers[provider_id]
+        secret, _source = resolve_secret(provider)
+        if not secret:
+            self.window.error(
+                "No API key",
+                f"Run 'ensemble key set {provider_id}' or export "
+                f"${provider.env_var}.",
+            )
+            return
+        self.window.set_status(f"Discovering models for {provider_id}…")
+
+        def worker() -> None:
+            try:
+                models = discover_provider(provider, secret)
+                GLib.idle_add(
+                    self._on_models_discovered, provider_id, models, None
+                )
+            except DiscoveryError as exc:
+                GLib.idle_add(
+                    self._on_models_discovered, provider_id, None, str(exc)
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_models_discovered(self, provider_id, models, error):
+        if error:
+            self.window.error("Model discovery failed", error)
+            return False
+        provider = self.window.config.providers.get(provider_id)
+        if provider is None:
+            return False
+        provider.models = models
+        self.window.mark_dirty()
+        self.refresh()
+        self.window.roles_page.refresh()
+        self.window.launch_page.refresh_preview()
+        self.window.set_status(
+            f"{provider_id}: {len(models)} models discovered (unsaved)"
+        )
+        return False
 
     def on_remove(self, _button=None) -> None:
         provider_id = self._selected_id()

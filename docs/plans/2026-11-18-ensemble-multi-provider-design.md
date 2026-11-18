@@ -137,6 +137,23 @@ The peer helper passes `OPENCODE_CONFIG` to point at this file. It also passes
 `OPENCODE_CONFIG`, while a standalone run honors it (verified with
 `opencode --standalone debug agents`).
 
+### Provider presets and discovery
+
+Three presets ship with documented endpoints:
+
+| Preset | Protocol | Base URL | Models endpoint | Key check |
+| --- | --- | --- | --- | --- |
+| `openrouter` | openai | `https://openrouter.ai/api/v1` | `/models` | `/auth/key` |
+| `opencode` | openai | `https://opencode.ai/inference/go` | `/openai/v1/models` | models call requires key |
+| `deepseek` | anthropic | `https://api.deepseek.com/anthropic` | `https://api.deepseek.com/models` | models call requires key |
+
+`ensemble presets list` shows them; `providers add --preset` fills the provider
+record; `providers discover PROVIDER|--all` fetches the catalog with the stored
+key and saves only the model IDs that key can see. The GUI exposes the same
+flow through the preset picker, **Fetch models**, and **Discover models**.
+OpenRouter and OpenCode use opencode's native providers; DeepSeek remains a
+custom Anthropic-compatible provider for Claude Code.
+
 ### Secrets
 
 - Keyring service `ensemble`, username = provider id.
@@ -251,6 +268,11 @@ DeepSeek's current IDs, as exposed by opencode 2.3.2, are
 `deepseek/deepseek-flash` and `deepseek/deepseek-v4-pro`. The legacy
 `deepseek-chat` / `deepseek-reasoner` IDs are not available there.
 
+Observed at setup time (2026-11-18): OpenRouter listed 443 models;
+OpenCode Go listed 32, including `hy4-preview`, `mimo-v2.6-flash`,
+`mimo-v2.6-pro`, `deepseek-v4.1-flash`, `deepseek-v4-pro`, `glm-5.3`,
+`kimi-k3`, and `claude-haiku-5-5`; DeepSeek listed 2.
+
 Hy4 is Tencent's 770B-total / 49B-active flagship announced 2026-11-04, with
 strong agentic-coding scores but a high hallucination rate on knowledge it does
 not have (89% on AA-Omniscience). That makes it suitable as a critic and
@@ -276,5 +298,8 @@ option-generator, not as a source of truth; the orchestrator must verify claims.
 - Tencent Hy4 announcement: https://www.tencent.com/tencent-launches-hy4-joining-the-ranks-of-the-worlds-leading-open-source-ai-models/
 - Hy4 coverage: https://www.heise.de/en/news/Tencent-Hy4-New-AI-model-joins-China-s-top-tier-11513717.html
 - OpenRouter model catalog: https://openrouter.ai/api/v1/models
+- OpenRouter API overview: https://openrouter.ai/docs/api-reference/overview
 - opencode providers docs: https://opencode.ai/docs/providers/
 - opencode agents docs: https://opencode.ai/docs/agents/
+- OpenCode Console harnesses: https://opencode.ai/docs/console/harnesses/
+- DeepSeek list-models API: https://api-docs.deepseek.com/api/list-models/

@@ -79,6 +79,31 @@ Generated `config.json` and `opencode.json` are backed up to
 `~/.config/ensemble/backups/` whenever their content changes; the newest five
 per file are kept.
 
+## Provider presets and model discovery
+
+Three documented presets are built in: **OpenRouter**, **OpenCode Go**, and
+**DeepSeek**.
+
+```bash
+ensemble presets list
+ensemble providers add --preset opencode
+ensemble key set opencode
+ensemble providers discover --all
+```
+
+Discovery uses each provider's documented endpoint:
+
+| Provider | Models endpoint | Key check |
+| --- | --- | --- |
+| OpenRouter | `https://openrouter.ai/api/v1/models` | `/api/v1/auth/key` |
+| OpenCode Go | `https://opencode.ai/inference/go/openai/v1/models` | models call requires the key |
+| DeepSeek | `https://api.deepseek.com/models` | models call requires the key |
+
+The GUI does the same: **Add provider → choose a preset → paste the key →
+Fetch models**, or select a provider and click **Discover models**. Only models
+visible to the supplied key are stored, and the role model dropdowns update
+from that list.
+
 ## Desktop launcher
 
 `ensemble desktop install` writes
@@ -119,10 +144,12 @@ paths resolve relative to `--cwd`.
 
 All four phases are implemented: config/keyring, read-only peer runner, the
 `/ensemble` skill, the GTK control panel, desktop packaging, protected-file
-fallback, and backup rotation. A real read-only reviewer call through
-opencode + DeepSeek was verified (reply, cost/token metadata, run artifacts,
-tree guard), and the GUI was smoke-tested under Xvfb. The Hy4/MiMo contract
-test needs an OpenRouter key:
+fallback, backup rotation, and provider presets with per-key model discovery.
+A real read-only reviewer call through opencode + DeepSeek was verified (reply,
+cost/token metadata, run artifacts, tree guard), and the GUI was smoke-tested
+under Xvfb. Enter the provider keys through the masked GUI field or the hidden
+`ensemble key set` prompt, then run discovery. The Hy4/MiMo contract test needs
+an OpenRouter key:
 
 ```bash
 .venv/bin/ensemble key set openrouter
@@ -134,9 +161,12 @@ test needs an OpenRouter key:
 ```
 ensemble init
 ensemble config show
+ensemble presets list
 ensemble providers list
 ensemble providers add --id ID --label NAME --protocol openai|anthropic \
     --env-var VAR [--base-url URL] [--models a,b] [--kind custom|builtin]
+ensemble providers add --preset openrouter|opencode|deepseek [--force]
+ensemble providers discover PROVIDER | --all
 ensemble roles show
 ensemble roles set ROLE PROVIDER MODEL [--small-model MODEL]
 ensemble key set PROVIDER [--stdin] [--allow-file]

@@ -51,6 +51,8 @@ class Provider:
     kind: str = "custom"
     package: str = ""
     auth_style: str = "bearer"
+    models_url: str = ""
+    verify_url: str = ""
     models: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -62,6 +64,8 @@ class Provider:
             "kind": self.kind,
             "package": self.package,
             "auth_style": self.auth_style,
+            "models_url": self.models_url,
+            "verify_url": self.verify_url,
             "models": list(self.models),
         }
 
@@ -78,6 +82,8 @@ class Provider:
             kind=str(data.get("kind") or default_kind),
             package=str(data.get("package") or ""),
             auth_style=str(data.get("auth_style") or "bearer"),
+            models_url=str(data.get("models_url") or ""),
+            verify_url=str(data.get("verify_url") or ""),
             models=[str(model) for model in (data.get("models") or [])],
         )
 
@@ -211,6 +217,12 @@ class Config:
                 raise ConfigError(
                     f"Custom provider {provider_id!r} needs base_url"
                 )
+            for field_name in ("models_url", "verify_url"):
+                value = getattr(provider, field_name)
+                if value and not value.startswith(("http://", "https://")):
+                    raise ConfigError(
+                        f"Provider {provider_id!r} has an invalid {field_name}"
+                    )
             if any(not model.strip() for model in provider.models):
                 raise ConfigError(f"Provider {provider_id!r} has an empty model id")
             if len(set(provider.models)) != len(provider.models):

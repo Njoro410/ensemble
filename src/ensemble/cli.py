@@ -23,6 +23,7 @@ from .config import (
     save_config,
 )
 from .desktop import DesktopError, install_desktop, uninstall_desktop
+from .discovery import DiscoveryError, discover_provider
 from .launch import LaunchError, build_launch_plan, redacted_preview
 from .opencode_config import (
     ROLE_AGENTS,
@@ -30,6 +31,7 @@ from .opencode_config import (
     opencode_config_path,
     write_opencode_config,
 )
+from .presets import PRESETS, provider_from_preset
 from .secrets import (
     SecretError,
     import_from_env,
@@ -89,25 +91,117 @@ def cmd_providers_list(args: argparse.Namespace) -> int:
 
 def cmd_providers_add(args: argparse.Namespace) -> int:
     config = load_config()
-    if args.id in config.providers and not args.force:
-        raise ConfigError(
-            f"Provider {args.id!r} already exists (use --force to replace)"
-        )
-    models = [item.strip() for item in args.models.split(",") if item.strip()]
-    provider = Provider(
-        id=args.id,
-        label=args.label or args.id,
-        protocol=args.protocol,
-        env_var=args.env_var,
-        base_url=args.base_url,
-        kind=args.kind,
-        package=args.package,
-        auth_style=args.auth_style,
-        models=models,
+    models_override = (
+        [item.strip() for item in args.models.split(",") if item.strip()]
+        if args.models
+        else None
     )
-    config.providers[args.id] = provider
+
+    if args.preset:
+        preset = PRESETS.get(args.preset)
+        if preset is None:
+            raise ConfigError(f"Unknown preset {args.preset!r}")
+        if args.id and args.id != preset.id:
+            raise ConfigError(
+                f"Preset {preset.id!r} must use provider id {preset.id!r}"
+            )
+        provider_id = preset.id
+        existing = config.providers.get(provider_id)
+        if existing and not args.force:
+            raise ConfigError(
+                f"Provider {provider_id!r} already exists "
+                "(use --force to replace)"
+            )
+        models = (
+            models_override
+            if models_override is not None
+            else (existing.models if existing else [])
+        )
+        provider = provider_from_preset(preset.id, models=models)
+    else:
+        if not args.id or not args.protocol or not args.env_var:
+            raise ConfigError(
+                "Provide --preset, or --id/--protocol/--env-var"
+            )
+        if args.id in config.providers and not args.force:
+            raise ConfigError(
+                f"Provider {args.id!r} already exists "
+                "(use --force to replace)"
+            )
+        provider_id = args.id
+        provider = Provider(
+            id=args.id,
+            label=args.label or args.id,
+            protocol=args.protocol,
+            env_var=args.env_var,
+            base_url=args.base_url,
+            kind=args.kind,
+            package=args.package,
+            auth_style=args.auth_style,
+            models=models_override or [],
+        )
+
+    config.providers[provider_id] = provider
     save_config(config)
-    print(f"Added provider {args.id} ({provider.protocol}, {provider.kind}).")
+    print(f"Added provider {provider_id} ({provider.protocol}, {provider.kind}).")
+    if not provider.models:
+        print(
+            f"Next: ensemble key set {provider_id}, then "
+            f"ensemble providers discover {provider_id}"
+        )
+    return 0
+
+
+def cmd_providers_discover(args: argparse.Namespace) -> int:
+    if args.all == bool(args.provider):
+        raise ConfigError("Provide exactly one of: a provider id, or --all")
+    config = load_config()
+    provider_ids = sorted(config.providers) if args.all else [args.provider]
+    changed = False
+    failures = 0
+    for provider_id in provider_ids:
+        provider = config.providers.get(provider_id)
+        if provider is None:
+            print(
+                f"ensemble: unknown provider {provider_id!r}", file=sys.stderr
+            )
+            failures += 1
+            continue
+        secret, source = resolve_secret(provider)
+        if not secret:
+            print(
+                f"{provider_id}: no key (ensemble key set {provider_id} or "
+                f"export ${provider.env_var})",
+                file=sys.stderr,
+            )
+            failures += 1
+            continue
+        try:
+            models = discover_provider(provider, secret)
+        except DiscoveryError as exc:
+            print(f"{provider_id}: {exc}", file=sys.stderr)
+            failures += 1
+            continue
+        provider.models = models
+        changed = True
+        print(f"{provider_id}: {len(models)} models via {source}")
+        for model in models[:15]:
+            print(f"  {model}")
+        if len(models) > 15:
+            print(f"  … {len(models) - 15} more")
+    if changed:
+        save_config(config)
+        print(f"Saved models to {config_path()}")
+    return 1 if failures else 0
+
+
+def cmd_presets_list(args: argparse.Namespace) -> int:
+    print(f"{'ID':<12} {'LABEL':<16} {'PROTOCOL':<10} DESCRIPTION")
+    for preset in PRESETS.values():
+        print(
+            f"{preset.id:<12} {preset.label:<16} {preset.protocol:<10} "
+            f"{preset.description}"
+        )
     return 0
 
 
@@ -387,12 +481,12 @@ def build_parser() -> argparse.ArgumentParser:
     providers_list = providers_sub.add_parser("list")
     providers_list.set_defaults(func=cmd_providers_list)
     providers_add = providers_sub.add_parser("add")
-    providers_add.add_argument("--id", required=True)
+    providers_add.add_argument("--id", default=None)
     providers_add.add_argument("--label", default=None)
     providers_add.add_argument(
-        "--protocol", required=True, choices=["anthropic", "openai"]
+        "--protocol", default=None, choices=["anthropic", "openai"]
     )
-    providers_add.add_argument("--env-var", required=True)
+    providers_add.add_argument("--env-var", default=None)
     providers_add.add_argument("--base-url", default="")
     providers_add.add_argument(
         "--kind", default="custom", choices=["custom", "builtin"]
@@ -404,8 +498,22 @@ def build_parser() -> argparse.ArgumentParser:
     providers_add.add_argument(
         "--models", default="", help="comma-separated model ids"
     )
+    providers_add.add_argument(
+        "--preset", default=None, choices=sorted(PRESETS)
+    )
     providers_add.add_argument("--force", action="store_true")
     providers_add.set_defaults(func=cmd_providers_add)
+    providers_discover = providers_sub.add_parser("discover")
+    providers_discover.add_argument("provider", nargs="?")
+    providers_discover.add_argument("--all", action="store_true")
+    providers_discover.set_defaults(func=cmd_providers_discover)
+
+    presets = sub.add_parser("presets", help="List built-in provider presets")
+    presets_sub = presets.add_subparsers(
+        dest="presets_command", required=True
+    )
+    presets_list = presets_sub.add_parser("list")
+    presets_list.set_defaults(func=cmd_presets_list)
 
     roles = sub.add_parser("roles", help="Show or assign roles")
     roles_sub = roles.add_subparsers(dest="roles_command", required=True)
@@ -494,7 +602,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except (ConfigError, SecretError, SkillError, LaunchError, DesktopError) as exc:
+    except (
+        ConfigError,
+        SecretError,
+        SkillError,
+        LaunchError,
+        DesktopError,
+        DiscoveryError,
+    ) as exc:
         print(f"ensemble: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
