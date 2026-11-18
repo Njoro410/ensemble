@@ -75,6 +75,16 @@ install -Dm644 LICENSE "$PKG/usr/share/doc/ensemble/LICENSE"
     sed 's/^/ /' LICENSE
 } > "$PKG/usr/share/doc/ensemble/copyright"
 
+{
+    echo "ensemble (${VERSION}) unstable; urgency=medium"
+    echo
+    echo "  * Initial public release."
+    echo
+    echo " -- Njoro410 <95216451+Njoro410@users.noreply.github.com>  $(date -Ru)"
+} > "$WORK/debian-changelog"
+gzip -9n -c "$WORK/debian-changelog" \
+    > "$PKG/usr/share/doc/ensemble/changelog.gz"
+
 SIZE=$(du -sk "$PKG" | cut -f1)
 cat > "$PKG/DEBIAN/control" <<EOF
 Package: ensemble
