@@ -32,6 +32,7 @@ from .opencode_config import (
     write_opencode_config,
 )
 from .presets import PRESETS, provider_from_preset
+from .roles import ROLE_ORDER, ROLE_SPECS, seed_assignments
 from .secrets import (
     SecretError,
     import_from_env,
@@ -141,6 +142,11 @@ def cmd_providers_add(args: argparse.Namespace) -> int:
             models=models_override or [],
         )
 
+    if args.preset and not provider.models and provider.key_ref:
+        source = config.providers.get(provider.key_ref)
+        if source is not None:
+            provider.models = list(source.models)
+
     config.providers[provider_id] = provider
     save_config(config)
     print(f"Added provider {provider_id} ({provider.protocol}, {provider.kind}).")
@@ -207,18 +213,45 @@ def cmd_presets_list(args: argparse.Namespace) -> int:
 
 def cmd_roles_show(args: argparse.Namespace) -> int:
     config = load_config()
-    for role, assignment in config.roles.items():
+    for role in ROLE_ORDER:
+        assignment = config.roles.get(role)
+        if assignment is None:
+            print(f"{role:<18} -> (unassigned)")
+            continue
         small = f" (small: {assignment.small_model})" if assignment.small_model else ""
-        print(f"{role:<12} -> {assignment.provider}/{assignment.model}{small}")
+        print(f"{role:<18} -> {assignment.provider}/{assignment.model}{small}")
+    for role in sorted(set(config.roles) - set(ROLE_ORDER)):
+        assignment = config.roles[role]
+        small = f" (small: {assignment.small_model})" if assignment.small_model else ""
+        print(f"{role:<18} -> {assignment.provider}/{assignment.model}{small}")
+    return 0
+
+
+def cmd_roles_seed(args: argparse.Namespace) -> int:
+    config = load_config()
+    results = seed_assignments(config, force=args.force)
+    save_config(config)
+    unresolved = 0
+    for role, provider, model, status in results:
+        print(f"{role:<18} {status:<12} {provider}/{model}")
+        if status == "UNRESOLVED":
+            unresolved += 1
+    if unresolved:
+        print(
+            f"{unresolved} roles unresolved; run "
+            "'ensemble providers discover --all' first.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
 def cmd_roles_set(args: argparse.Namespace) -> int:
     config = load_config()
-    if args.role not in config.roles:
+    if args.role not in config.roles and args.role not in ROLE_SPECS:
         raise ConfigError(
             f"Unknown role {args.role!r}. Roles: "
-            + ", ".join(sorted(config.roles))
+            + ", ".join(ROLE_ORDER)
         )
     if args.provider not in config.providers:
         raise ConfigError(f"Unknown provider {args.provider!r}")
@@ -525,6 +558,9 @@ def build_parser() -> argparse.ArgumentParser:
     roles_set.add_argument("model")
     roles_set.add_argument("--small-model", default=None)
     roles_set.set_defaults(func=cmd_roles_set)
+    roles_seed = roles_sub.add_parser("seed")
+    roles_seed.add_argument("--force", action="store_true")
+    roles_seed.set_defaults(func=cmd_roles_seed)
 
     key = sub.add_parser("key", help="Manage API keys in the OS keyring")
     key_sub = key.add_subparsers(dest="key_command", required=True)

@@ -17,12 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import ConfigError, load_config
-from .opencode_config import (
-    ROLE_AGENTS,
-    OpencodeConfigError,
-    opencode_config_path,
-)
+from .opencode_config import OpencodeConfigError, opencode_config_path
 from .process import ProcessTimeout, run_capture
+from .roles import ROLE_AGENTS, ROLE_CONTRACTS
 from .secrets import SecretError, resolve_secret
 
 EXIT_CONFIG = 2
@@ -38,23 +35,7 @@ class PeerError(Exception):
         self.code = code
 
 
-CONTRACTS = {
-    "reviewer": (
-        "Reply with these sections:\n"
-        "## Findings\n"
-        "## Risks\n"
-        "## Questions\n"
-        "## Recommended options\n"
-        "Cite file:line where possible."
-    ),
-    "test_runner": (
-        "Reply with these sections:\n"
-        "## Test plan\n"
-        "## Commands (not executed)\n"
-        "## Expected outcomes\n"
-        "## Coverage gaps"
-    ),
-}
+CONTRACTS = ROLE_CONTRACTS
 
 
 @dataclass

@@ -9,6 +9,8 @@ from typing import Any
 
 from .config import Provider
 
+USER_AGENT = "ensemble/0.1"
+
 
 class DiscoveryError(Exception):
     """Raised when a provider's model catalog cannot be fetched."""
@@ -26,7 +28,10 @@ def _models_url(base_url: str, protocol: str) -> str:
 def _auth_headers(
     api_key: str | None, auth_style: str, protocol: str
 ) -> dict[str, str]:
-    headers = {"Accept": "application/json"}
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
+    }
     if protocol == "anthropic":
         headers["anthropic-version"] = "2023-06-01"
     if api_key:
@@ -118,10 +123,14 @@ def discover_provider(provider: Provider, api_key: str) -> list[str]:
         raise DiscoveryError("An API key is required to discover models")
     if provider.verify_url:
         verify_key(provider.verify_url, api_key, provider.auth_style)
-    return fetch_models(
+    models = fetch_models(
         provider.base_url,
         provider.protocol,
         api_key,
         models_url=provider.models_url or None,
         auth_style=provider.auth_style,
     )
+    suffix = provider.model_alias_suffix
+    if suffix:
+        return sorted(f"{model}{suffix}" for model in models)
+    return models

@@ -14,8 +14,11 @@ class Preset:
     protocol: str
     base_url: str
     env_var: str
+    key_ref: str
+    model_alias_suffix: str
     kind: str
     auth_style: str
+    headers: dict[str, str]
     models_url: str
     verify_url: str
     docs_url: str
@@ -29,25 +32,47 @@ PRESETS: dict[str, Preset] = {
         protocol="openai",
         base_url="https://openrouter.ai/api/v1",
         env_var="OPENROUTER_API_KEY",
+        key_ref="",
+        model_alias_suffix="",
         kind="builtin",
         auth_style="bearer",
+        headers={},
         models_url="https://openrouter.ai/api/v1/models",
         verify_url="https://openrouter.ai/api/v1/auth/key",
         docs_url="https://openrouter.ai/docs/api-reference/overview",
         description="Unified catalog; native opencode provider.",
     ),
-    "opencode": Preset(
-        id="opencode",
+    "openrouter-anthropic": Preset(
+        id="openrouter-anthropic",
+        label="OpenRouter (Anthropic)",
+        protocol="anthropic",
+        base_url="https://openrouter.ai/api",
+        env_var="OPENROUTER_API_KEY",
+        key_ref="openrouter",
+        model_alias_suffix="",
+        kind="custom",
+        auth_style="bearer",
+        headers={},
+        models_url="https://openrouter.ai/api/v1/models",
+        verify_url="https://openrouter.ai/api/v1/auth/key",
+        docs_url="https://openrouter.ai/docs/api-reference/overview",
+        description="Anthropic Messages surface for Claude Code; shares the OpenRouter key.",
+    ),
+    "opencode-go": Preset(
+        id="opencode-go",
         label="OpenCode Go",
         protocol="openai",
-        base_url="https://opencode.ai/inference/go",
+        base_url="https://opencode.ai/inference/go/openai/v1",
         env_var="OPENCODE_API_KEY",
-        kind="builtin",
+        key_ref="",
+        model_alias_suffix="-go",
+        kind="custom",
         auth_style="bearer",
+        headers={"x-opencode-session": "ensemble"},
         models_url="https://opencode.ai/inference/go/openai/v1/models",
         verify_url="",
         docs_url="https://opencode.ai/docs/console/harnesses/",
-        description="Console/Go subscription gateway; native opencode provider.",
+        description="Console/Go gateway; requires x-opencode-session.",
     ),
     "deepseek": Preset(
         id="deepseek",
@@ -55,8 +80,11 @@ PRESETS: dict[str, Preset] = {
         protocol="anthropic",
         base_url="https://api.deepseek.com/anthropic",
         env_var="DEEPSEEK_API_KEY",
+        key_ref="",
+        model_alias_suffix="",
         kind="custom",
         auth_style="bearer",
+        headers={},
         models_url="https://api.deepseek.com/models",
         verify_url="",
         docs_url="https://api-docs.deepseek.com/api/list-models/",
@@ -77,6 +105,9 @@ def provider_from_preset(
         base_url=preset.base_url,
         kind=preset.kind,
         auth_style=preset.auth_style,
+        key_ref=preset.key_ref,
+        model_alias_suffix=preset.model_alias_suffix,
+        headers=dict(preset.headers),
         models_url=preset.models_url,
         verify_url=preset.verify_url,
         models=list(models or []),

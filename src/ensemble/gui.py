@@ -33,6 +33,13 @@ from .launch import (  # noqa: E402
 )
 from .opencode_config import opencode_config_path, write_opencode_config  # noqa: E402
 from .presets import PRESETS, provider_from_preset  # noqa: E402
+from .roles import (  # noqa: E402
+    CORE_ROLES,
+    ROLE_ORDER,
+    ROLE_SPECS,
+    SPECIALIZED_ROLES,
+    seed_assignments,
+)
 from .secrets import (  # noqa: E402
     SecretError,
     keyring_available,
@@ -41,17 +48,6 @@ from .secrets import (  # noqa: E402
 )
 from .skill import SkillError, install_skill  # noqa: E402
 
-ROLE_ORDER = ("orchestrator", "reviewer", "test_runner")
-ROLE_TITLES = {
-    "orchestrator": "Orchestrator",
-    "reviewer": "Reviewer",
-    "test_runner": "Test runner",
-}
-ROLE_DESCRIPTIONS = {
-    "orchestrator": "Drives Claude Code. Requires an Anthropic-compatible provider.",
-    "reviewer": "Read-only review through opencode.",
-    "test_runner": "Read-only test planning through opencode.",
-}
 
 
 def _dim(label: Gtk.Label) -> Gtk.Label:
@@ -111,6 +107,7 @@ class ProviderDialog(Gtk.Dialog):
         self.config = config
         self.models_url = provider.models_url if provider else ""
         self.verify_url = provider.verify_url if provider else ""
+        self.headers = dict(provider.headers) if provider else {}
         self.set_default_size(600, 560)
         self.add_button("Cancel", Gtk.ResponseType.CANCEL)
         self.save_button = self.add_button("Save", Gtk.ResponseType.OK)
@@ -242,6 +239,7 @@ class ProviderDialog(Gtk.Dialog):
             self.env_entry.set_text(provider.env_var)
             self.models_url = provider.models_url
             self.verify_url = provider.verify_url
+            self.headers = dict(provider.headers)
             for widget in (
                 self.protocol_combo,
                 self.kind_combo,
@@ -257,6 +255,7 @@ class ProviderDialog(Gtk.Dialog):
             self.id_entry.set_sensitive(True)
             self.models_url = ""
             self.verify_url = ""
+            self.headers = {}
             for widget in (
                 self.protocol_combo,
                 self.kind_combo,
@@ -310,6 +309,7 @@ class ProviderDialog(Gtk.Dialog):
             auth_style=self.auth_combo.get_active_id() or "bearer",
             models_url=self.models_url,
             verify_url=self.verify_url,
+            headers=dict(self.headers),
             models=models,
         )
 
@@ -587,14 +587,59 @@ class RolesPage:
         self.window = window
         self._loading = False
         self.rows: dict[str, dict] = {}
-        self.widget = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        self.widget.set_border_width(12)
+        self.widget = Gtk.ScrolledWindow()
+        self.widget.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        content.set_border_width(12)
+        self.widget.add(content)
+
+        toolbar = Gtk.Box(spacing=6)
+        seed_button = Gtk.Button(label="Seed recommended roles")
+        seed_button.connect("clicked", self.on_seed)
+        toolbar.pack_start(seed_button, False, False, 0)
+        toolbar.pack_start(
+            _dim(
+                Gtk.Label(
+                    label="All peer roles are read-only advisors; the orchestrator writes."
+                )
+            ),
+            False,
+            False,
+            0,
+        )
+        content.pack_start(toolbar, False, False, 0)
 
         for role in ROLE_ORDER:
-            frame = Gtk.Frame(label=ROLE_TITLES[role])
+            spec = ROLE_SPECS[role]
+            if role == CORE_ROLES[0]:
+                content.pack_start(
+                    Gtk.Label(
+                        label="<b>Core agents</b>",
+                        use_markup=True,
+                        xalign=0,
+                    ),
+                    False,
+                    False,
+                    4,
+                )
+            elif role == SPECIALIZED_ROLES[0]:
+                content.pack_start(
+                    Gtk.Label(
+                        label="<b>Specialized agents</b>",
+                        use_markup=True,
+                        xalign=0,
+                    ),
+                    False,
+                    False,
+                    4,
+                )
+
+            frame = Gtk.Frame(label=spec.title)
             inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
             inner.set_border_width(10)
-            inner.pack_start(_dim(Gtk.Label(label=ROLE_DESCRIPTIONS[role])), False, False, 0)
+            description = _dim(Gtk.Label(label=spec.description))
+            description.set_line_wrap(True)
+            inner.pack_start(description, False, False, 0)
             grid = Gtk.Grid(column_spacing=10, row_spacing=6)
 
             provider_combo = Gtk.ComboBoxText()
@@ -627,7 +672,7 @@ class RolesPage:
 
             inner.pack_start(grid, False, False, 0)
             frame.add(inner)
-            self.widget.pack_start(frame, False, False, 0)
+            content.pack_start(frame, False, False, 0)
             self.rows[role] = {
                 "provider": provider_combo,
                 "model": model_combo,
@@ -640,7 +685,7 @@ class RolesPage:
         try:
             for role in ROLE_ORDER:
                 row = self.rows[role]
-                assignment = self.window.config.roles[role]
+                assignment = self.window.config.roles.get(role)
                 combo = row["provider"]
                 combo.remove_all()
                 for provider_id in sorted(self.window.config.providers):
@@ -651,11 +696,18 @@ class RolesPage:
                         provider_id,
                         f"{provider.label} ({provider_id}, {provider.protocol})",
                     )
-                combo.set_active_id(assignment.provider)
+                if assignment is not None:
+                    combo.set_active_id(assignment.provider)
+                else:
+                    combo.set_active(-1)
                 self._populate_models(role)
-                row["model"].get_child().set_text(assignment.model)
+                row["model"].get_child().set_text(
+                    assignment.model if assignment else ""
+                )
                 if row["small"] is not None:
-                    row["small"].set_text(assignment.small_model or "")
+                    row["small"].set_text(
+                        (assignment.small_model or "") if assignment else ""
+                    )
         finally:
             self._loading = False
 
@@ -687,15 +739,33 @@ class RolesPage:
         self.window.mark_dirty()
         self.window.launch_page.refresh_preview()
 
+    def on_seed(self, _button=None) -> None:
+        try:
+            results = seed_assignments(self.window.config, force=False)
+        except ConfigError as exc:
+            self.window.error("Could not seed roles", str(exc))
+            return
+        self.refresh()
+        self.window.mark_dirty()
+        self.window.launch_page.refresh_preview()
+        unresolved = [item for item in results if item[3] == "UNRESOLVED"]
+        self.window.set_status(
+            f"Seeded roles; {len(unresolved)} unresolved"
+        )
+
     def save_to_config(self) -> None:
         for role in ROLE_ORDER:
             row = self.rows[role]
             provider_id = row["provider"].get_active_id()
-            if not provider_id:
-                raise ConfigError(f"Choose a provider for the {role} role")
             model = row["model"].get_child().get_text().strip()
-            if not model:
-                raise ConfigError(f"Choose a model for the {role} role")
+            if not provider_id and not model:
+                self.window.config.roles.pop(role, None)
+                continue
+            if not provider_id or not model:
+                raise ConfigError(
+                    f"Complete provider and model for "
+                    f"{ROLE_SPECS[role].title}, or leave both blank"
+                )
             small = None
             if row["small"] is not None:
                 small = row["small"].get_text().strip() or None

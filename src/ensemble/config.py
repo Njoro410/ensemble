@@ -53,6 +53,9 @@ class Provider:
     auth_style: str = "bearer"
     models_url: str = ""
     verify_url: str = ""
+    key_ref: str = ""
+    model_alias_suffix: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
     models: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -66,6 +69,9 @@ class Provider:
             "auth_style": self.auth_style,
             "models_url": self.models_url,
             "verify_url": self.verify_url,
+            "key_ref": self.key_ref,
+            "model_alias_suffix": self.model_alias_suffix,
+            "headers": dict(self.headers),
             "models": list(self.models),
         }
 
@@ -84,6 +90,13 @@ class Provider:
             auth_style=str(data.get("auth_style") or "bearer"),
             models_url=str(data.get("models_url") or ""),
             verify_url=str(data.get("verify_url") or ""),
+            key_ref=str(data.get("key_ref") or ""),
+            model_alias_suffix=str(data.get("model_alias_suffix") or ""),
+            headers={
+                str(key): str(value)
+                for key, value in (data.get("headers") or {}).items()
+                if isinstance(value, str)
+            },
             models=[str(model) for model in (data.get("models") or [])],
         )
 
@@ -223,6 +236,23 @@ class Config:
                     raise ConfigError(
                         f"Provider {provider_id!r} has an invalid {field_name}"
                     )
+            for header, value in provider.headers.items():
+                if not header or "\n" in header or "\r" in header:
+                    raise ConfigError(
+                        f"Provider {provider_id!r} has an invalid header name"
+                    )
+                if "\n" in value or "\r" in value:
+                    raise ConfigError(
+                        f"Provider {provider_id!r} header {header!r} "
+                        "contains a newline"
+                    )
+
+        for provider_id, provider in self.providers.items():
+            if provider.key_ref and provider.key_ref not in self.providers:
+                raise ConfigError(
+                    f"Provider {provider_id!r} references unknown key_ref "
+                    f"{provider.key_ref!r}"
+                )
             if any(not model.strip() for model in provider.models):
                 raise ConfigError(f"Provider {provider_id!r} has an empty model id")
             if len(set(provider.models)) != len(provider.models):

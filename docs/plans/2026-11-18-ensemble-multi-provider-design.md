@@ -1,8 +1,8 @@
 # Ensemble — multi-provider control plane and peer protocol
 
 **Date:** 2026-11-18
-**Status:** approved; Phases 1–4 complete; Hy4/MiMo contract test pending an
-OpenRouter key
+**Status:** approved; Phases 1–4 complete; live discovery, 13-role catalog, and
+Haiku/peer acceptance verified
 
 ## Goal
 
@@ -139,24 +139,39 @@ The peer helper passes `OPENCODE_CONFIG` to point at this file. It also passes
 
 ### Provider presets and discovery
 
-Three presets ship with documented endpoints:
+Four presets ship with documented endpoints:
 
 | Preset | Protocol | Base URL | Models endpoint | Key check |
 | --- | --- | --- | --- | --- |
 | `openrouter` | openai | `https://openrouter.ai/api/v1` | `/models` | `/auth/key` |
-| `opencode` | openai | `https://opencode.ai/inference/go` | `/openai/v1/models` | models call requires key |
+| `openrouter-anthropic` | anthropic | `https://openrouter.ai/api` | `/v1/models` | `/auth/key` |
+| `opencode-go` | openai | `https://opencode.ai/inference/go/openai/v1` | `/models` | models call requires key |
 | `deepseek` | anthropic | `https://api.deepseek.com/anthropic` | `https://api.deepseek.com/models` | models call requires key |
+
+OpenCode Go's gateway requires an `x-opencode-session` header on chat requests;
+the preset is a custom OpenAI-compatible provider carrying that header. It uses
+a distinct provider id (`opencode-go`) because the built-in `opencode` id
+overrode custom model entries. Models carry a local `-go` suffix which the
+generated config maps back through `modelID`; the alias prevents opencode from
+applying its native model-family routing (which returned 404 for Gemini).
+Discovery sends `User-Agent: ensemble/0.1`; Cloudflare returns error 1010 for
+urllib's default signature.
+
+`openrouter-anthropic` exposes OpenRouter's Anthropic Messages surface at
+`https://openrouter.ai/api`; Claude Code appends `/v1/messages`. It shares the
+OpenRouter key via `key_ref: openrouter`.
 
 `ensemble presets list` shows them; `providers add --preset` fills the provider
 record; `providers discover PROVIDER|--all` fetches the catalog with the stored
 key and saves only the model IDs that key can see. The GUI exposes the same
 flow through the preset picker, **Fetch models**, and **Discover models**.
-OpenRouter and OpenCode use opencode's native providers; DeepSeek remains a
-custom Anthropic-compatible provider for Claude Code.
+DeepSeek remains a custom Anthropic-compatible provider for Claude Code.
 
 ### Secrets
 
-- Keyring service `ensemble`, username = provider id.
+- Keyring service `ensemble`, username = provider id, or the provider's
+  `key_ref` when one provider shares another's key (for example
+  `openrouter-anthropic` → `openrouter`).
 - Resolution order: keyring, then the provider's configured env var.
 - `ensemble key set` reads via getpass or stdin; never accepts a key argument.
 - Launch exports keys in-process; no launcher file or secret is written.
@@ -193,6 +208,33 @@ $0.50 per run dir; 180s per peer call; `--file` paths resolve relative to
 `ensemble-peer` writes `NN-role.prompt.md`, `NN-role.raw.jsonl`, `NN-role.md`,
 and `NN-role.meta.json`; it exits `2` on config/usage errors, `3` on peer
 failure, `4` on tree-guard violation, `5` on budget, `6` on timeout.
+
+## 13-role catalog
+
+`ensemble roles seed --force` assigns the catalog below. All non-orchestrator
+roles are read-only advisors; Claude Code is the only writer/executor. Coder,
+Refactorer, and Docs propose patches; Tester and Debugger propose commands.
+
+| Role | Recommended model | Assigned provider |
+| --- | --- | --- |
+| Orchestrator | `anthropic/claude-haiku-5.5` | `openrouter-anthropic` |
+| Planner | `gemini-4-argon` | `opencode-go` (`gemini-4-argon-go`) |
+| Coder / Implementer | `kimi-k2.7-code` | `opencode-go` |
+| Reviewer | `grok-4.7` | `opencode-go` |
+| Tester / Verifier | `deepseek-v4.1-flash` | `opencode-go` (`mimo-v2.6-flash-go` fallback) |
+| Explorer / Researcher | `claude-haiku-5-5` | `opencode-go` |
+| Architect / Spec Writer | `kimi-k3.1-pro` | `opencode-go` |
+| Debugger | `grok-4.7` | `opencode-go` |
+| Security Reviewer | `gemini-4-argon` | `opencode-go` |
+| Database / Migration | `kimi-k3.1-pro` | `opencode-go` |
+| Refactorer | `kimi-k2.7-code` | `opencode-go` |
+| Docs / Changelog | `gpt-6-luna` | `opencode-go` (`claude-haiku-5-5-go` fallback) |
+| Release / DevOps | `gemini-4-argon` | `opencode-go` |
+
+Two substitutions are deliberate: OpenCode Go routes GPT-6 Luna with a
+provider-hosted tool that the routed Chat endpoint rejects, so Docs uses Claude
+Haiku (OpenRouter GPT-6 Luna remains selectable); DeepSeek V4.1 Flash is
+region-gated until the Console is set to Global, so Tester uses MiMo.
 
 ## GUI (Phase 3)
 
@@ -269,9 +311,26 @@ DeepSeek's current IDs, as exposed by opencode 2.3.2, are
 `deepseek-chat` / `deepseek-reasoner` IDs are not available there.
 
 Observed at setup time (2026-11-18): OpenRouter listed 443 models;
-OpenCode Go listed 32, including `hy4-preview`, `mimo-v2.6-flash`,
+OpenCode Go listed 32, including `hy4`, `hy4-preview`, `mimo-v2.6-flash`,
 `mimo-v2.6-pro`, `deepseek-v4.1-flash`, `deepseek-v4-pro`, `glm-5.3`,
 `kimi-k3`, and `claude-haiku-5-5`; DeepSeek listed 2.
+
+### Acceptance results (2026-11-18)
+
+- Claude Code on **Claude Haiku 5.5** through OpenRouter's Anthropic surface:
+  non-interactive launch returned `READY`, exit 0.
+- Hy4 reviewer through OpenRouter: 5,651 input / 699 output tokens, $0.004757,
+  27.8s; found the injected bug and followed the output contract.
+- MiMo test plan through OpenRouter: 5,753 input / 1,298 output tokens,
+  $0.001181, 25.7s.
+- MiMo reviewer through OpenCode Go: 4,887 input / 383 output tokens, 21.4s;
+  Go subscription reported cost 0; repo stayed unchanged.
+- Real role turns through OpenCode Go: Planner (`gemini-4-argon-go`), Reviewer
+  (`grok-4.7-go`), Coder (`kimi-k2.7-code-go`), Docs
+  (`claude-haiku-5-5-go`), and Tester (`mimo-v2.6-flash-go`) all returned
+  contract-compliant read-only replies.
+- All keys resolve from the OS keyring; the working tree guard passed on every
+  call.
 
 Hy4 is Tencent's 770B-total / 49B-active flagship announced 2026-11-04, with
 strong agentic-coding scores but a high hallucination rate on knowledge it does
@@ -299,7 +358,10 @@ option-generator, not as a source of truth; the orchestrator must verify claims.
 - Hy4 coverage: https://www.heise.de/en/news/Tencent-Hy4-New-AI-model-joins-China-s-top-tier-11513717.html
 - OpenRouter model catalog: https://openrouter.ai/api/v1/models
 - OpenRouter API overview: https://openrouter.ai/docs/api-reference/overview
+- Claude Code gateway protocol: https://code.claude.com/docs/llm-gateway-protocol
+- OpenCode Go specifics: https://opencode.ai/v2/docs/console/go/
 - opencode providers docs: https://opencode.ai/docs/providers/
 - opencode agents docs: https://opencode.ai/docs/agents/
 - OpenCode Console harnesses: https://opencode.ai/docs/console/harnesses/
+- OpenCode Go specifics: https://opencode.ai/v2/docs/console/go/
 - DeepSeek list-models API: https://api-docs.deepseek.com/api/list-models/

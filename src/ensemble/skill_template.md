@@ -25,6 +25,9 @@ PATH and tell the user to re-run `{{ENSEMBLE_BIN}} skill install`.
 - `brainstorm <task>` — reviewer + test-runner, then synthesis (default)
 - `review [paths]` — reviewer only
 - `verify [paths]` — test-runner only
+- `role <role-id> <task>` — ask any peer role (planner, coder, reviewer,
+  test_runner, explorer, architect, debugger, security_reviewer, database,
+  refactorer, docs, release)
 - `status` — roles, recent runs, spend
 
 If no mode is given, ask which one; do not guess. Anything after the mode is the
@@ -104,6 +107,15 @@ into chat.
 2. One test-runner call with `--round 1`.
 3. Save the plan under RUN and summarize it. Peer commands are proposals: you
    review and execute them yourself **only after** the user asks to run them.
+
+## Mode: role
+
+1. Run `{{ENSEMBLE_BIN}} roles show` and confirm the requested role exists.
+2. Write `RUN/brief.md` with the task, constraints, and the relevant files.
+3. Call the peer with `--role <role-id> --round 1`.
+4. Summarize the reply. All peer roles are read-only advisors: coder,
+   refactorer, and docs propose patches; tester and debugger propose commands;
+   you remain the only writer and executor.
 
 ## Mode: status
 

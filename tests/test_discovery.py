@@ -99,3 +99,12 @@ def test_discover_provider_verifies_key_and_uses_models_url(monkeypatch):
 def test_discover_provider_requires_key():
     with pytest.raises(DiscoveryError):
         discover_provider(provider_from_preset("deepseek"), "")
+
+
+def test_discover_provider_applies_model_alias_suffix(monkeypatch):
+    provider = provider_from_preset("opencode-go")
+    monkeypatch.setattr(
+        "ensemble.discovery.fetch_models",
+        lambda *args, **kwargs: ["m1", "m2"],
+    )
+    assert discover_provider(provider, "key") == ["m1-go", "m2-go"]

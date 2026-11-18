@@ -99,6 +99,11 @@ Discovery uses each provider's documented endpoint:
 | OpenCode Go | `https://opencode.ai/inference/go/openai/v1/models` | models call requires the key |
 | DeepSeek | `https://api.deepseek.com/models` | models call requires the key |
 
+OpenCode Go is configured as an explicit OpenAI-compatible provider because its
+gateway requires an `x-opencode-session` header; the preset supplies
+`x-opencode-session: ensemble`. Discovery sends `User-Agent: ensemble/0.1`
+because Cloudflare rejects the default urllib signature.
+
 The GUI does the same: **Add provider → choose a preset → paste the key →
 Fetch models**, or select a provider and click **Discover models**. Only models
 visible to the supplied key are stored, and the role model dropdowns update
@@ -130,11 +135,35 @@ also aborts the run if the working tree changes during a peer call.
 
 ## Roles
 
-| role | default provider | default model | who drives it |
-| --- | --- | --- | --- |
-| orchestrator | deepseek | deepseek-flash | Claude Code (Anthropic API) |
-| reviewer | openrouter | tencent/hy4 | opencode, read-only |
-| test_runner | openrouter | xiaomi/mimo-v2.6-flash | opencode, read-only |
+`ensemble roles seed --force` installs this 13-role catalog. Every
+non-orchestrator role is a **read-only advisor**; Claude Code remains the only
+agent that writes files or executes commands.
+
+| Role | Model | Provider |
+| --- | --- | --- |
+| Orchestrator | `anthropic/claude-haiku-5.5` | `openrouter-anthropic` |
+| Planner | `gemini-4-argon-go` | `opencode-go` |
+| Coder / Implementer | `kimi-k2.7-code-go` | `opencode-go` |
+| Reviewer | `grok-4.7-go` | `opencode-go` |
+| Tester / Verifier | `mimo-v2.6-flash-go` | `opencode-go` |
+| Explorer / Researcher | `claude-haiku-5-5-go` | `opencode-go` |
+| Architect / Spec Writer | `kimi-k3.1-pro-go` | `opencode-go` |
+| Debugger | `grok-4.7-go` | `opencode-go` |
+| Security Reviewer | `gemini-4-argon-go` | `opencode-go` |
+| Database / Migration | `kimi-k3.1-pro-go` | `opencode-go` |
+| Refactorer | `kimi-k2.7-code-go` | `opencode-go` |
+| Docs / Changelog | `claude-haiku-5-5-go` | `opencode-go` |
+| Release / DevOps | `gemini-4-argon-go` | `opencode-go` |
+
+The `-go` suffix is a local alias; the generated opencode config maps it back to
+the upstream model via `modelID`, avoiding opencode's native model-family
+routing. Two practical substitutions:
+
+- **Docs** uses Claude Haiku because GPT-6 Luna's provider-hosted tools are
+  rejected by the routed Go Chat endpoint. `openai/gpt-6-luna` is still
+  selectable via OpenRouter.
+- **Tester** uses MiMo because DeepSeek V4.1 Flash is region-gated by OpenCode
+  Go (“Select Global” in the Console). Switch the role after changing region.
 
 Peer calls pass `--standalone` to opencode so `OPENCODE_CONFIG` is honored
 (verified on opencode 2.3.2; the background service ignores it). `--file`
@@ -142,17 +171,23 @@ paths resolve relative to `--cwd`.
 
 ## Status
 
-All four phases are implemented: config/keyring, read-only peer runner, the
-`/ensemble` skill, the GTK control panel, desktop packaging, protected-file
-fallback, backup rotation, and provider presets with per-key model discovery.
-A real read-only reviewer call through opencode + DeepSeek was verified (reply,
-cost/token metadata, run artifacts, tree guard), and the GUI was smoke-tested
-under Xvfb. Enter the provider keys through the masked GUI field or the hidden
-`ensemble key set` prompt, then run discovery. The Hy4/MiMo contract test needs
-an OpenRouter key:
+Everything is implemented and verified with the stored keys:
+
+- **13 roles** seeded; the orchestrator runs **Claude Haiku 5.5** through
+  OpenRouter's Anthropic surface (`https://openrouter.ai/api`), and a
+  non-interactive Claude Code launch returned `READY`.
+- **OpenRouter** — 443 models; Hy4 review ($0.0048) and MiMo test plan
+  ($0.0012) passed earlier.
+- **OpenCode Go** — 32 models; real Planner (Gemini), Reviewer (Grok), Coder
+  (Kimi), Docs (Haiku), and Tester (MiMo) turns passed read-only.
+- **DeepSeek** — 2 models, available as an orchestrator fallback.
+
+The GUI shows all providers with `keyring` status and model counts. To refresh
+catalogs after a key change:
 
 ```bash
-.venv/bin/ensemble key set openrouter
+.venv/bin/ensemble providers discover --all
+.venv/bin/ensemble roles seed --force
 .venv/bin/ensemble doctor
 ```
 
@@ -165,9 +200,10 @@ ensemble presets list
 ensemble providers list
 ensemble providers add --id ID --label NAME --protocol openai|anthropic \
     --env-var VAR [--base-url URL] [--models a,b] [--kind custom|builtin]
-ensemble providers add --preset openrouter|opencode|deepseek [--force]
+ensemble providers add --preset openrouter|openrouter-anthropic|opencode-go|deepseek [--force]
 ensemble providers discover PROVIDER | --all
 ensemble roles show
+ensemble roles seed [--force]
 ensemble roles set ROLE PROVIDER MODEL [--small-model MODEL]
 ensemble key set PROVIDER [--stdin] [--allow-file]
 ensemble key import-env PROVIDER [--allow-file]

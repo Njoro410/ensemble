@@ -16,6 +16,10 @@ class SecretError(Exception):
 SERVICE = "ensemble"
 
 
+def _secret_id(provider: Provider) -> str:
+    return provider.key_ref or provider.id
+
+
 def secrets_file_path() -> Path:
     return config_dir() / "secrets.json"
 
@@ -110,7 +114,7 @@ def resolve_secret(provider: Provider) -> tuple[str | None, str]:
     if not _keyring_disabled():
         try:
             keyring = _keyring()
-            stored = keyring.get_password(SERVICE, provider.id)
+            stored = keyring.get_password(SERVICE, _secret_id(provider))
             if stored:
                 return stored, "keyring"
         except Exception:
@@ -118,7 +122,7 @@ def resolve_secret(provider: Provider) -> tuple[str | None, str]:
             pass
 
     file_secrets = _load_file_secrets()
-    protected = file_secrets.get(provider.id)
+    protected = file_secrets.get(_secret_id(provider))
     if protected:
         return protected, "protected-file"
 
@@ -133,17 +137,18 @@ def set_secret(
 ) -> None:
     if not secret:
         raise SecretError("Refusing to store an empty secret")
+    secret_id = _secret_id(provider)
     keyring_error: Exception | None = None
     if not _keyring_disabled():
         try:
             keyring = _keyring()
-            keyring.set_password(SERVICE, provider.id, secret)
-            _delete_file_secret(provider.id)
+            keyring.set_password(SERVICE, secret_id, secret)
+            _delete_file_secret(secret_id)
             return
         except Exception as exc:
             keyring_error = exc
     if allow_file:
-        _store_file_secret(provider.id, secret)
+        _store_file_secret(secret_id, secret)
         return
     reason = f" ({keyring_error})" if keyring_error else " (disabled)"
     raise SecretError(
