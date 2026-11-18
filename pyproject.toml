@@ -19,6 +19,9 @@ ensemble-peer = "ensemble.peer:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+ensemble = ["skill_template.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

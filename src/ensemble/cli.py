@@ -36,6 +36,7 @@ from .secrets import (
     resolve_secret,
     set_secret,
 )
+from .skill import SkillError, install_skill
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -188,6 +189,16 @@ def cmd_opencode_apply(args: argparse.Namespace) -> int:
     print(f"  agents: {agents}")
     if args.print_config:
         print(json.dumps(build_opencode_config(config), indent=2))
+    return 0
+
+
+def cmd_skill_install(args: argparse.Namespace) -> int:
+    path, changed = install_skill(force=args.force)
+    if changed:
+        print(f"Installed {path}")
+    else:
+        print(f"Already up to date: {path}")
+    print("Restart or reload the Claude Code session to pick up /ensemble.")
     return 0
 
 
@@ -431,6 +442,12 @@ def build_parser() -> argparse.ArgumentParser:
     opencode_apply.add_argument("--print", dest="print_config", action="store_true")
     opencode_apply.set_defaults(func=cmd_opencode_apply)
 
+    skill = sub.add_parser("skill", help="Install the Claude Code skill")
+    skill_sub = skill.add_subparsers(dest="skill_command", required=True)
+    skill_install = skill_sub.add_parser("install")
+    skill_install.add_argument("--force", action="store_true")
+    skill_install.set_defaults(func=cmd_skill_install)
+
     doctor = sub.add_parser("doctor", help="Check configuration and keys")
     doctor.set_defaults(func=cmd_doctor)
 
@@ -450,7 +467,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except (ConfigError, SecretError) as exc:
+    except (ConfigError, SecretError, SkillError) as exc:
         print(f"ensemble: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

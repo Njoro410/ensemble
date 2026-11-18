@@ -1,8 +1,8 @@
 # Ensemble — multi-provider control plane and peer protocol
 
 **Date:** 2026-11-18
-**Status:** approved; Phase 1 scaffold complete; Hy4/MiMo contract test pending
-an OpenRouter key
+**Status:** approved; Phases 1–2 complete; Hy4/MiMo contract test pending an
+OpenRouter key
 
 ## Goal
 
@@ -152,6 +152,10 @@ Claude Code skill (Phase 2) exposes:
 - `/ensemble verify` — test-run plan only.
 - `/ensemble status` — show roles, models, and recent run artifacts.
 
+`ensemble skill install` writes `~/.claude/skills/ensemble/SKILL.md` with the
+absolute paths of the installed `ensemble` and `ensemble-peer` binaries, then
+the session is restarted to load `/ensemble`.
+
 Peer output contract:
 
 - Reviewer: **Findings / Risks / Questions / Recommended options**, with
@@ -211,8 +215,9 @@ keys from the keyring at runtime and `exec`s `claude`. The GUI spawns
    `ensemble-peer`, `ensemble launch`. Verified end to end with a real DeepSeek
    peer call (reply, cost/token metadata, artifacts, tree guard). The Hy4/MiMo
    contract test awaits `OPENROUTER_API_KEY`.
-2. **Skill (Phase 2):** `/ensemble` modes, logging, tree guard integration,
-   budget enforcement, retry policy.
+2. **Skill (Phase 2, done):** `/ensemble` modes, logging, tree guard
+   integration, budget enforcement. The install command renders the skill with
+   absolute binary paths.
 3. **GUI (Phase 3):** GTK3 control panel, first-run import, Apply + Launch.
 4. **Polish (Phase 4):** model discovery UI, global-config option, backup
    management, protected-file fallback, `.desktop` packaging, docs.

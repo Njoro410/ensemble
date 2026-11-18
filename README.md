@@ -26,7 +26,24 @@ cd ~/projects/ensemble
 
 # Check everything.
 .venv/bin/ensemble doctor
+
+# Install the Claude Code skill (writes ~/.claude/skills/ensemble/SKILL.md).
+.venv/bin/ensemble skill install
 ```
+
+## Claude Code skill
+
+Restart or reload Claude Code after installing, then:
+
+```
+/ensemble brainstorm <task>
+/ensemble review [paths]
+/ensemble verify [paths]
+/ensemble status
+```
+
+The installed skill embeds absolute paths to this venv's `ensemble` and
+`ensemble-peer`, so it works without PATH changes.
 
 ## Run a peer call
 
@@ -82,6 +99,7 @@ ensemble key set PROVIDER [--stdin]
 ensemble key import-env PROVIDER
 ensemble key status
 ensemble opencode apply [--print]
+ensemble skill install [--force]
 ensemble doctor
 ensemble launch [--repo DIR] [--dry-run] [-- CLAUDE_ARGS...]
 ensemble-peer ask --role ROLE --brief FILE [--cwd DIR] [--file PATH]...
