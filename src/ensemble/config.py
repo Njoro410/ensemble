@@ -55,6 +55,7 @@ class Provider:
     verify_url: str = ""
     key_ref: str = ""
     model_alias_suffix: str = ""
+    include_in_opencode: bool = True
     headers: dict[str, str] = field(default_factory=dict)
     models: list[str] = field(default_factory=list)
 
@@ -71,6 +72,7 @@ class Provider:
             "verify_url": self.verify_url,
             "key_ref": self.key_ref,
             "model_alias_suffix": self.model_alias_suffix,
+            "include_in_opencode": self.include_in_opencode,
             "headers": dict(self.headers),
             "models": list(self.models),
         }
@@ -92,6 +94,7 @@ class Provider:
             verify_url=str(data.get("verify_url") or ""),
             key_ref=str(data.get("key_ref") or ""),
             model_alias_suffix=str(data.get("model_alias_suffix") or ""),
+            include_in_opencode=bool(data.get("include_in_opencode", True)),
             headers={
                 str(key): str(value)
                 for key, value in (data.get("headers") or {}).items()

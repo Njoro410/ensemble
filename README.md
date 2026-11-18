@@ -111,6 +111,12 @@ gateway requires an `x-opencode-session` header; the preset supplies
 `x-opencode-session: ensemble`. Discovery sends `User-Agent: ensemble/0.1`
 because Cloudflare rejects the default urllib signature.
 
+OpenCode Go has a second, Anthropic-facing provider for the orchestrator:
+`opencode-anthropic` (base `https://opencode.ai/inference/go/anthropic`). It
+shares the Go key and injects `x-opencode-session` through Claude Code's
+`ANTHROPIC_CUSTOM_HEADERS`. It is marked `include_in_opencode: false` so it
+does not appear in the peer opencode config.
+
 The GUI does the same: **Add provider → choose a preset → paste the key →
 Fetch models**, or select a provider and click **Discover models**. Only models
 visible to the supplied key are stored, and the role model dropdowns update
@@ -148,7 +154,7 @@ agent that writes files or executes commands.
 
 | Role | Model | Provider |
 | --- | --- | --- |
-| Orchestrator | `anthropic/claude-haiku-5.5` | `openrouter-anthropic` |
+| Orchestrator | `anthropic/claude-haiku-5.5` | `openrouter-anthropic` (or `opencode-anthropic` with `claude-haiku-5-5`) |
 | Planner | `gemini-4-argon-go` | `opencode-go` |
 | Coder / Implementer | `kimi-k2.7-code-go` | `opencode-go` |
 | Reviewer | `grok-4.7-go` | `opencode-go` |
@@ -184,7 +190,8 @@ Everything is implemented and verified with the stored keys:
   (plan → approval gate → implement → parallel review → verify → docs/release).
 - The orchestrator runs **Claude Haiku 5.5** through OpenRouter's Anthropic
   surface (`https://openrouter.ai/api`), and a non-interactive Claude Code
-  launch returned `READY`.
+  launch returned `READY`. OpenCode Go's Anthropic surface
+  (`opencode-anthropic/claude-haiku-5-5`) is also verified and selectable.
 - **OpenRouter** — 443 models; Hy4 review ($0.0048) and MiMo test plan
   ($0.0012) passed earlier.
 - **OpenCode Go** — 32 models; real Planner (Gemini), Reviewer (Grok), Coder
@@ -209,7 +216,7 @@ ensemble presets list
 ensemble providers list
 ensemble providers add --id ID --label NAME --protocol openai|anthropic \
     --env-var VAR [--base-url URL] [--models a,b] [--kind custom|builtin]
-ensemble providers add --preset openrouter|openrouter-anthropic|opencode-go|deepseek [--force]
+ensemble providers add --preset openrouter|openrouter-anthropic|opencode-go|opencode-anthropic|deepseek [--force]
 ensemble providers discover PROVIDER | --all
 ensemble roles show
 ensemble roles catalog

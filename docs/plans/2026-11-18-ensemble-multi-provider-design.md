@@ -146,6 +146,7 @@ Four presets ship with documented endpoints:
 | `openrouter` | openai | `https://openrouter.ai/api/v1` | `/models` | `/auth/key` |
 | `openrouter-anthropic` | anthropic | `https://openrouter.ai/api` | `/v1/models` | `/auth/key` |
 | `opencode-go` | openai | `https://opencode.ai/inference/go/openai/v1` | `/models` | models call requires key |
+| `opencode-anthropic` | anthropic | `https://opencode.ai/inference/go/anthropic` | `/openai/v1/models` | models call requires key |
 | `deepseek` | anthropic | `https://api.deepseek.com/anthropic` | `https://api.deepseek.com/models` | models call requires key |
 
 OpenCode Go's gateway requires an `x-opencode-session` header on chat requests;
@@ -160,6 +161,14 @@ urllib's default signature.
 `openrouter-anthropic` exposes OpenRouter's Anthropic Messages surface at
 `https://openrouter.ai/api`; Claude Code appends `/v1/messages`. It shares the
 OpenRouter key via `key_ref: openrouter`.
+
+`opencode-anthropic` exposes the same Go models through OpenCode's Anthropic
+surface. It shares the Go key via `key_ref: opencode-go`, injects
+`x-opencode-session` via Claude Code's `ANTHROPIC_CUSTOM_HEADERS`, and sets
+`include_in_opencode: false` so it is not duplicated in the peer opencode
+config. The orchestrator requires an Anthropic-protocol provider because
+Claude Code speaks the Anthropic Messages API; OpenAI-only providers remain
+peer-only.
 
 `ensemble presets list` shows them; `providers add --preset` fills the provider
 record; `providers discover PROVIDER|--all` fetches the catalog with the stored
@@ -347,6 +356,9 @@ OpenCode Go listed 32, including `hy4`, `hy4-preview`, `mimo-v2.6-flash`,
 
 - Claude Code on **Claude Haiku 5.5** through OpenRouter's Anthropic surface:
   non-interactive launch returned `READY`, exit 0.
+- Claude Code on **Claude Haiku 5.5** through OpenCode Go's Anthropic surface
+  (`opencode-anthropic`, custom session header): non-interactive launch also
+  returned `READY`, exit 0.
 - Hy4 reviewer through OpenRouter: 5,651 input / 699 output tokens, $0.004757,
   27.8s; found the injected bug and followed the output contract.
 - MiMo test plan through OpenRouter: 5,753 input / 1,298 output tokens,
@@ -387,6 +399,7 @@ option-generator, not as a source of truth; the orchestrator must verify claims.
 - OpenRouter model catalog: https://openrouter.ai/api/v1/models
 - OpenRouter API overview: https://openrouter.ai/docs/api-reference/overview
 - Claude Code gateway protocol: https://code.claude.com/docs/llm-gateway-protocol
+- Claude Code gateway rollout / custom headers: https://code.claude.com/docs/en/llm-gateway-rollout
 - OpenCode Go specifics: https://opencode.ai/v2/docs/console/go/
 - opencode providers docs: https://opencode.ai/docs/providers/
 - opencode agents docs: https://opencode.ai/docs/agents/

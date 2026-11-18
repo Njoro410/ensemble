@@ -48,6 +48,12 @@ def build_launch_plan(
 
     if provider.base_url:
         environment["ANTHROPIC_BASE_URL"] = provider.base_url
+    if provider.headers:
+        environment["ANTHROPIC_CUSTOM_HEADERS"] = "\n".join(
+            f"{name}: {value}" for name, value in provider.headers.items()
+        )
+    else:
+        environment.pop("ANTHROPIC_CUSTOM_HEADERS", None)
     if provider.auth_style == "x-api-key":
         environment["ANTHROPIC_API_KEY"] = secret
         environment.pop("ANTHROPIC_AUTH_TOKEN", None)
@@ -86,6 +92,14 @@ def redacted_preview(plan: LaunchPlan) -> list[str]:
         if name in plan.env:
             lines.append(f"{name}={plan.env[name]}")
     lines.append(f"{plan.auth_var}=<redacted>")
+    custom_headers = plan.env.get("ANTHROPIC_CUSTOM_HEADERS")
+    if custom_headers:
+        names = ", ".join(
+            line.split(":", 1)[0].strip()
+            for line in custom_headers.splitlines()
+            if line.strip()
+        )
+        lines.append(f"ANTHROPIC_CUSTOM_HEADERS=<set: {names}>")
     lines.append(f"key source: {plan.source}")
     return lines
 

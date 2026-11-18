@@ -41,6 +41,8 @@ def build_opencode_config(config: Config) -> dict[str, Any]:
         # native catalog, variants, and auth handling. Only supply the key.
         if provider.kind == "builtin":
             continue
+        if not provider.include_in_opencode:
+            continue
         package = provider.package or PROTOCOL_PACKAGES[provider.protocol]
         entry: dict[str, Any] = {
             "name": provider.label,

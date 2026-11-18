@@ -64,6 +64,15 @@ def test_custom_provider_headers_are_emitted():
     assert "mimo-v2.6-flash-go" in entry["models"]
 
 
+def test_orchestrator_only_provider_is_omitted():
+    config = default_config()
+    config.providers["opencode-anthropic"] = provider_from_preset(
+        "opencode-anthropic", models=["claude-haiku-5-5"]
+    )
+    data = build_opencode_config(config)
+    assert "opencode-anthropic" not in data["providers"]
+
+
 def test_model_aliases_emit_model_id():
     config = default_config()
     config.providers["opencode-go"] = provider_from_preset(

@@ -8,6 +8,7 @@ def test_presets_have_documented_endpoints():
         "openrouter",
         "openrouter-anthropic",
         "opencode-go",
+        "opencode-anthropic",
         "deepseek",
     }
     for preset in PRESETS.values():
@@ -23,6 +24,15 @@ def test_openrouter_anthropic_preset_shares_key():
     assert provider.base_url == "https://openrouter.ai/api"
     assert provider.key_ref == "openrouter"
     assert provider.models_url == preset.models_url
+
+
+def test_opencode_anthropic_preset_is_orchestrator_only():
+    provider = provider_from_preset("opencode-anthropic")
+    assert provider.protocol == "anthropic"
+    assert provider.base_url == "https://opencode.ai/inference/go/anthropic"
+    assert provider.key_ref == "opencode-go"
+    assert provider.headers == {"x-opencode-session": "ensemble"}
+    assert provider.include_in_opencode is False
 
 
 def test_provider_from_preset_preserves_models_and_endpoints():

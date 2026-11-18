@@ -45,3 +45,15 @@ def test_terminal_command_contains_no_secret(tmp_path: Path):
     assert "ensemble.cli" in joined
     assert "launch" in joined
     assert "synthetic-key" not in joined
+
+
+def test_custom_headers_are_exported_and_redacted(monkeypatch):
+    monkeypatch.setenv("ENSEMBLE_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "synthetic-key")
+    config = default_config()
+    config.providers["deepseek"].headers = {"x-test": "header-value"}
+    plan = build_launch_plan(config)
+    assert plan.env["ANTHROPIC_CUSTOM_HEADERS"] == "x-test: header-value"
+    preview = "\n".join(redacted_preview(plan))
+    assert "ANTHROPIC_CUSTOM_HEADERS=<set: x-test>" in preview
+    assert "header-value" not in preview

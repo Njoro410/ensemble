@@ -144,7 +144,10 @@ def cmd_providers_add(args: argparse.Namespace) -> int:
 
     if args.preset and not provider.models and provider.key_ref:
         source = config.providers.get(provider.key_ref)
-        if source is not None:
+        if (
+            source is not None
+            and source.model_alias_suffix == provider.model_alias_suffix
+        ):
             provider.models = list(source.models)
 
     config.providers[provider_id] = provider
@@ -326,7 +329,7 @@ def cmd_opencode_apply(args: argparse.Namespace) -> int:
     custom = sorted(
         provider.id
         for provider in config.providers.values()
-        if provider.kind == "custom"
+        if provider.kind == "custom" and provider.include_in_opencode
     )
     agents = ", ".join(agent for agent, _ in ROLE_AGENTS.values())
     print(f"Wrote {target}")

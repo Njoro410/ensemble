@@ -16,6 +16,7 @@ class Preset:
     env_var: str
     key_ref: str
     model_alias_suffix: str
+    include_in_opencode: bool
     kind: str
     auth_style: str
     headers: dict[str, str]
@@ -34,6 +35,7 @@ PRESETS: dict[str, Preset] = {
         env_var="OPENROUTER_API_KEY",
         key_ref="",
         model_alias_suffix="",
+        include_in_opencode=True,
         kind="builtin",
         auth_style="bearer",
         headers={},
@@ -50,6 +52,7 @@ PRESETS: dict[str, Preset] = {
         env_var="OPENROUTER_API_KEY",
         key_ref="openrouter",
         model_alias_suffix="",
+        include_in_opencode=True,
         kind="custom",
         auth_style="bearer",
         headers={},
@@ -66,6 +69,7 @@ PRESETS: dict[str, Preset] = {
         env_var="OPENCODE_API_KEY",
         key_ref="",
         model_alias_suffix="-go",
+        include_in_opencode=True,
         kind="custom",
         auth_style="bearer",
         headers={"x-opencode-session": "ensemble"},
@@ -73,6 +77,23 @@ PRESETS: dict[str, Preset] = {
         verify_url="",
         docs_url="https://opencode.ai/docs/console/harnesses/",
         description="Console/Go gateway; requires x-opencode-session.",
+    ),
+    "opencode-anthropic": Preset(
+        id="opencode-anthropic",
+        label="OpenCode Go (Anthropic)",
+        protocol="anthropic",
+        base_url="https://opencode.ai/inference/go/anthropic",
+        env_var="OPENCODE_API_KEY",
+        key_ref="opencode-go",
+        model_alias_suffix="",
+        include_in_opencode=False,
+        kind="custom",
+        auth_style="bearer",
+        headers={"x-opencode-session": "ensemble"},
+        models_url="https://opencode.ai/inference/go/openai/v1/models",
+        verify_url="",
+        docs_url="https://opencode.ai/docs/console/harnesses/",
+        description="Anthropic Messages surface for the Claude Code orchestrator.",
     ),
     "deepseek": Preset(
         id="deepseek",
@@ -82,6 +103,7 @@ PRESETS: dict[str, Preset] = {
         env_var="DEEPSEEK_API_KEY",
         key_ref="",
         model_alias_suffix="",
+        include_in_opencode=True,
         kind="custom",
         auth_style="bearer",
         headers={},
@@ -107,6 +129,7 @@ def provider_from_preset(
         auth_style=preset.auth_style,
         key_ref=preset.key_ref,
         model_alias_suffix=preset.model_alias_suffix,
+        include_in_opencode=preset.include_in_opencode,
         headers=dict(preset.headers),
         models_url=preset.models_url,
         verify_url=preset.verify_url,
